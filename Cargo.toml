@@ -1,0 +1,22 @@
+[package]
+name = "fedora-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight Fedora/Linux terminal system monitor with accountability-focused metrics."
+readme = "README.md"
+keywords = ["fedora", "linux", "monitor", "tui", "ratatui"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+ratatui = "0.26"
+crossterm = "0.27"
+libc = "0.2"
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
