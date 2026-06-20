@@ -17,7 +17,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   BIN_NAME: linwatch
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name || github.ref_name }}
 
 jobs:
   build:
@@ -26,14 +25,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            archive: linwatch-${{ env.RELEASE_TAG }}-x86_64-unknown-linux-gnu.tar.gz
-          - target: aarch64-unknown-linux-gnu
-            archive: linwatch-${{ env.RELEASE_TAG }}-aarch64-unknown-linux-gnu.tar.gz
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Determine release tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "RELEASE_TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -53,16 +58,19 @@ jobs:
       - name: Package archive
         run: |
           set -euo pipefail
+          ARCHIVE="${BIN_NAME}-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
           mkdir -p dist/package
           cp "target/${{ matrix.target }}/release/${BIN_NAME}" dist/package/
           cp README.md LICENSE install.sh dist/package/
-          tar -C dist/package -czf "dist/${{ matrix.archive }}" .
+          tar -C dist/package -czf "dist/${ARCHIVE}" .
+          echo "archive_name=${ARCHIVE}" >> $GITHUB_OUTPUT
+        id: package
 
       - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.archive }}
-          path: dist/${{ matrix.archive }}
+          name: ${{ steps.package.outputs.archive_name }}
+          path: dist/${{ steps.package.outputs.archive_name }}
           if-no-files-found: error
 
   publish:
@@ -89,7 +97,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name || github.ref_name }}
           target_commitish: ${{ github.sha }}
           files: |
             dist/*.tar.gz
