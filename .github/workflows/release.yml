@@ -5,6 +5,9 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
@@ -58,5 +61,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./*/*.tar.gz
-          generate_release_notes: false
+          files: |
+            ./*/*.tar.gz
+            install.sh
+          generate_release_notes: true
