@@ -11,7 +11,7 @@ repository = "https://github.com/digitalninjanv/linwatch"
 homepage = "https://github.com/digitalninjanv/linwatch"
 
 [dependencies]
-ratatui = "0.26"
+ratatui = "0.30"
 crossterm = "0.27"
 libc = "0.2"
 toml = "0.8"
