@@ -70,6 +70,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -91,4 +94,5 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/sha256sums.txt
+            install.sh
           generate_release_notes: true
