@@ -520,8 +520,8 @@ impl AppState {
                         let (prev_rx, prev_tx) = previous.get(name).copied().unwrap_or((rx, tx));
                         NetInterface {
                             name: name.clone(),
-                            down_bps: ((rx.saturating_sub(prev_rx)) as f64 * 8.0) / elapsed,
-                            up_bps: ((tx.saturating_sub(prev_tx)) as f64 * 8.0) / elapsed,
+                            down_bps: ((rx.saturating_sub(prev_rx)) as f64) / elapsed,
+                            up_bps: ((tx.saturating_sub(prev_tx)) as f64) / elapsed,
                         }
                     })
                     .collect();

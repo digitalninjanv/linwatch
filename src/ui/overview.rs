@@ -281,7 +281,7 @@ fn compact_gb_pair(used_gb: f64, total_gb: f64) -> String {
 }
 
 fn network_pressure(bytes_per_second: f64) -> f64 {
-    bytes_per_second.clamp(0.0, 100_000_000.0) / 1_000_000.0
+    (bytes_per_second * 8.0).clamp(0.0, 100_000_000.0) / 1_000_000.0
 }
 
 fn dynamic_history_max(history: &VecDeque<(f64, f64)>) -> Option<u64> {
