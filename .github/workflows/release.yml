@@ -28,9 +28,9 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            archive: linwatch-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+            archive: linwatch-${{ env.RELEASE_TAG }}-x86_64-unknown-linux-gnu.tar.gz
           - target: aarch64-unknown-linux-gnu
-            archive: linwatch-${{ github.ref_name }}-aarch64-unknown-linux-gnu.tar.gz
+            archive: linwatch-${{ env.RELEASE_TAG }}-aarch64-unknown-linux-gnu.tar.gz
     steps:
       - name: Checkout
         uses: actions/checkout@v4
