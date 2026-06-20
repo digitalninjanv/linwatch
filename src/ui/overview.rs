@@ -25,13 +25,18 @@ struct KpiCard<'a> {
 }
 
 pub fn overview(frame: &mut Frame, area: Rect, app: &AppState) {
-    let chunks = Layout::default()
+    let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(10), Constraint::Min(8)])
+        .constraints([
+            Constraint::Length(if area.height < 24 { 6 } else { 7 }),
+            Constraint::Length(if area.height < 24 { 7 } else { 8 }),
+            Constraint::Min(8),
+        ])
         .split(area);
 
-    render_kpi_row(frame, chunks[0], app);
-    render_body(frame, chunks[1], app);
+    render_status_strip(frame, sections[0], app);
+    render_kpi_row(frame, sections[1], app);
+    render_body(frame, sections[2], app);
 }
 
 fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
@@ -39,18 +44,10 @@ fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
     let chunks = kpi_layout(area);
 
     let cpu = app.cpu_usage;
-    let temp = app.temp_c.unwrap_or(0.0);
-    let temp_display = app
-        .temp_c
-        .map(|value| format!("{value:.0}\u{b0}C"))
-        .unwrap_or_else(|| String::from("N/A"));
     let mem = app.mem_pct();
     let dsk = app.disk.pct as f64;
-    let net_down = network_pressure(app.net_down_bps);
-    let net_up = network_pressure(app.net_up_bps);
     let gpu = app.primary_gpu();
     let gpu_usage = gpu.and_then(|gpu| gpu.usage_pct);
-    let gpu_temp = gpu.and_then(|gpu| gpu.temp_c);
     let empty_history = VecDeque::new();
 
     render_kpi(
@@ -71,20 +68,6 @@ fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
         frame,
         chunks[1],
         KpiCard {
-            label: "CPU Temp",
-            value: temp_display,
-            detail: temp_status(temp, app.temp_c.is_some()),
-            pct: temp.min(100.0),
-            thresholded: app.temp_c.is_some(),
-            history: &app.temp_history,
-            spark_max: Some(100),
-            spark_color: None,
-        },
-    );
-    render_kpi(
-        frame,
-        chunks[2],
-        KpiCard {
             label: "GPU Load",
             value: gpu_usage
                 .map(|value| format!("{value:.0}%"))
@@ -101,25 +84,7 @@ fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
     );
     render_kpi(
         frame,
-        chunks[3],
-        KpiCard {
-            label: "GPU Temp",
-            value: gpu_temp
-                .map(|value| format!("{value:.0}\u{b0}C"))
-                .unwrap_or_else(|| String::from("N/A")),
-            detail: gpu
-                .map(|gpu| truncate(&gpu.sensor_source, 14))
-                .unwrap_or_else(|| String::from("No sensor")),
-            pct: gpu_temp.unwrap_or(0.0).min(100.0),
-            thresholded: gpu_temp.is_some(),
-            history: &app.gpu_temp_history,
-            spark_max: Some(100),
-            spark_color: Some(t.accent_orange),
-        },
-    );
-    render_kpi(
-        frame,
-        chunks[4],
+        chunks[2],
         KpiCard {
             label: "Memory Use",
             value: format!("{:.1}%", mem),
@@ -133,7 +98,7 @@ fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
     );
     render_kpi(
         frame,
-        chunks[5],
+        chunks[3],
         KpiCard {
             label: "Root Disk",
             value: format!("{}%", app.disk.pct),
@@ -145,62 +110,128 @@ fn render_kpi_row(frame: &mut Frame, area: Rect, app: &AppState) {
             spark_color: None,
         },
     );
-    render_kpi(
-        frame,
-        chunks[6],
-        KpiCard {
-            label: "Download",
-            value: format!("{}/s", format_bytes(app.net_down_bps)),
-            detail: network_detail(app.net_down_bps, &app.net_down_history),
-            pct: net_down,
-            thresholded: false,
-            history: &app.net_down_history,
-            spark_max: dynamic_history_max(&app.net_down_history),
-            spark_color: Some(t.accent_teal),
-        },
-    );
-    render_kpi(
-        frame,
-        chunks[7],
-        KpiCard {
-            label: "Upload",
-            value: format!("{}/s", format_bytes(app.net_up_bps)),
-            detail: network_detail(app.net_up_bps, &app.net_up_history),
-            pct: net_up,
-            thresholded: false,
-            history: &app.net_up_history,
-            spark_max: dynamic_history_max(&app.net_up_history),
-            spark_color: Some(t.accent_orange),
-        },
-    );
 }
 
 fn kpi_layout(area: Rect) -> Vec<Rect> {
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(area)
+        .to_vec()
+}
+
+fn render_status_strip(frame: &mut Frame, area: Rect, app: &AppState) {
+    let t = theme::get();
+    let health_sev = Severity::from_health(app.health_score as f64);
+    let data_color = sample_status_color(app.sample_status());
+    let temp = app
+        .temp_c
+        .map(|value| format!("{value:.0}\u{b0}C"))
+        .unwrap_or_else(|| String::from("N/A"));
+    let gpu = app
+        .primary_gpu()
+        .map(|gpu| {
+            let usage = gpu
+                .usage_pct
+                .map(|value| format!("{value:.0}%"))
+                .unwrap_or_else(|| String::from("N/A"));
+            let temp = gpu
+                .temp_c
+                .map(|value| format!("{value:.0}\u{b0}C"))
+                .unwrap_or_else(|| String::from("N/A"));
+            format!("{} {usage} {temp}", gpu.kind)
+        })
+        .unwrap_or_else(|| String::from("No GPU"));
+    let primary_cause = app.root_causes.first();
+    let guidance = primary_cause
+        .map(|cause| cause.detail.as_str())
+        .unwrap_or("Collecting system guidance");
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(26), Constraint::Min(30)])
         .split(area);
-    let top = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-        ])
-        .split(rows[0]);
-    let bottom = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-        ])
-        .split(rows[1]);
-    vec![
-        top[0], top[1], top[2], top[3], bottom[0], bottom[1], bottom[2], bottom[3],
-    ]
+
+    let score_lines = vec![
+        Line::from(Span::styled(
+            format!(
+                "{} {}% {}",
+                health_sev.symbol(),
+                app.health_score,
+                severity_label(health_sev)
+            ),
+            Style::default()
+                .fg(severity_color(health_sev))
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("Data ", Style::default().fg(t.overlay0)),
+            Span::styled(
+                app.sample_status(),
+                Style::default().fg(data_color).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(Span::styled(
+            format!(
+                "Updated {:.1}s ago",
+                app.last_sample_at.elapsed().as_secs_f64()
+            ),
+            Style::default().fg(t.overlay1),
+        )),
+    ];
+    frame.render_widget(
+        Paragraph::new(score_lines)
+            .alignment(Alignment::Center)
+            .block(panel_block_severity("System health", health_sev)),
+        chunks[0],
+    );
+
+    let cause_sev = primary_cause
+        .map(|cause| cause.severity)
+        .unwrap_or(Severity::Ok);
+    let detail_lines = vec![
+        Line::from(vec![
+            Span::styled("Focus  ", Style::default().fg(t.overlay0)),
+            Span::styled(
+                primary_cause
+                    .map(|cause| format!("{} {}", cause.severity.symbol(), cause.title))
+                    .unwrap_or_else(|| String::from("○ No dominant pressure")),
+                Style::default()
+                    .fg(severity_color(cause_sev))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(Span::styled(
+            truncate(guidance, 86),
+            Style::default().fg(t.text),
+        )),
+        Line::from(vec![
+            Span::styled("Thermal ", Style::default().fg(t.overlay0)),
+            Span::styled(temp, Style::default().fg(t.accent_orange)),
+            Span::styled("  |  GPU ", Style::default().fg(t.overlay0)),
+            Span::styled(gpu, Style::default().fg(t.accent_purple)),
+            Span::styled("  |  Net ", Style::default().fg(t.overlay0)),
+            Span::styled(
+                format!(
+                    "D {}/s U {}/s",
+                    format_bytes(app.net_down_bps),
+                    format_bytes(app.net_up_bps)
+                ),
+                Style::default().fg(t.accent_teal),
+            ),
+        ]),
+    ];
+    frame.render_widget(
+        Paragraph::new(detail_lines)
+            .wrap(Wrap { trim: true })
+            .block(panel_block("Operator focus")),
+        chunks[1],
+    );
 }
 
 fn render_kpi(frame: &mut Frame, area: Rect, card: KpiCard<'_>) {
@@ -280,30 +311,6 @@ fn compact_gb_pair(used_gb: f64, total_gb: f64) -> String {
     }
 }
 
-fn network_pressure(bytes_per_second: f64) -> f64 {
-    (bytes_per_second * 8.0).clamp(0.0, 100_000_000.0) / 1_000_000.0
-}
-
-fn dynamic_history_max(history: &VecDeque<(f64, f64)>) -> Option<u64> {
-    let max = history
-        .iter()
-        .rev()
-        .take(30)
-        .map(|(_, value)| value.max(0.0).round() as u64)
-        .max()
-        .unwrap_or(1);
-    Some(max.max(1))
-}
-
-fn network_detail(current: f64, history: &VecDeque<(f64, f64)>) -> String {
-    let avg = moving_average(history, 10);
-    if avg <= 1.0 && current <= 1.0 {
-        String::from("Idle")
-    } else {
-        format!("Avg {}/s", format_bytes(avg))
-    }
-}
-
 fn gpu_load_detail(gpu: &crate::types::GpuInfo) -> String {
     match (gpu.frequency_mhz, gpu.max_frequency_mhz) {
         (Some(cur), Some(max)) if max >= 1000 => {
@@ -315,38 +322,56 @@ fn gpu_load_detail(gpu: &crate::types::GpuInfo) -> String {
     }
 }
 
-fn temp_status(temp: f64, has_value: bool) -> String {
-    if !has_value {
-        String::from("No sensor")
-    } else if temp >= 80.0 {
-        String::from("Hot")
-    } else if temp >= 70.0 {
-        String::from("Warm")
-    } else {
-        String::from("Normal")
-    }
-}
-
 fn render_body(frame: &mut Frame, area: Rect, app: &AppState) {
-    if area.width < 110 && area.height < 12 {
-        render_charts(frame, area, app);
+    if area.height < 12 {
+        render_alert_block(frame, area, app);
         return;
     }
 
-    let chunks = if area.width < 110 {
-        Layout::default()
+    if area.width < 110 {
+        let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+            .split(area);
+        render_charts(frame, chunks[0], app);
+        render_analysis_panel(frame, chunks[1], app);
+        return;
+    }
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(52),
+            Constraint::Percentage(22),
+            Constraint::Percentage(26),
+        ])
+        .split(area);
+
+    render_charts(frame, chunks[0], app);
+    render_resource_bars(frame, chunks[1], app);
+    render_alert_block(frame, chunks[2], app);
+}
+
+fn render_analysis_panel(frame: &mut Frame, area: Rect, app: &AppState) {
+    if area.height < 10 {
+        render_alert_block(frame, area, app);
+        return;
+    }
+
+    let chunks = if area.width < 70 {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(6), Constraint::Min(3)])
             .split(area)
     } else {
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
             .split(area)
     };
 
-    render_charts(frame, chunks[0], app);
-    render_analysis_panel(frame, chunks[1], app);
+    render_resource_bars(frame, chunks[0], app);
+    render_alert_block(frame, chunks[1], app);
 }
 
 fn render_charts(frame: &mut Frame, area: Rect, app: &AppState) {
@@ -367,25 +392,18 @@ fn render_charts(frame: &mut Frame, area: Rect, app: &AppState) {
         t.accent_teal,
     );
 
-    let gpu_avg = moving_average(&app.gpu_usage_history, 5);
-    let gpu_peak = app
-        .gpu_usage_history
-        .iter()
-        .map(|(_, v)| *v)
-        .fold(0.0, f64::max);
-    let gpu_title = if app.gpu_usage_history.len() >= 2 {
-        format!("GPU trend  average {:.0}% | peak {:.0}%", gpu_avg, gpu_peak)
-    } else if let Some(gpu) = app.primary_gpu() {
-        format!("GPU trend  collecting {} {}", gpu.kind, gpu.driver)
-    } else {
-        String::from("GPU trend  no GPU detected")
-    };
+    let mem_avg = moving_average(&app.mem_history, 5);
+    let mem_peak = app.mem_history.iter().map(|(_, v)| *v).fold(0.0, f64::max);
+    let mem_title = format!(
+        "Memory trend  average {:.0}% | peak {:.0}%",
+        mem_avg, mem_peak
+    );
     render_chart(
         frame,
         chunks[1],
-        &gpu_title,
-        &app.gpu_usage_history,
-        t.accent_purple,
+        &mem_title,
+        &app.mem_history,
+        t.accent_yellow,
     );
 }
 
@@ -495,22 +513,6 @@ fn parse_average_peak(rest: &str) -> Option<(String, String)> {
     Some((avg.to_string(), after_peak.to_string()))
 }
 
-fn render_analysis_panel(frame: &mut Frame, area: Rect, app: &AppState) {
-    if area.height < 10 {
-        render_resource_bars(frame, area, app);
-        return;
-    }
-
-    let pressure_height = if area.height < 12 { 6 } else { 8 };
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(pressure_height), Constraint::Min(3)])
-        .split(area);
-
-    render_resource_bars(frame, chunks[0], app);
-    render_alert_block(frame, chunks[1], app);
-}
-
 fn render_resource_bars(frame: &mut Frame, area: Rect, app: &AppState) {
     let t = theme::get();
     let block = panel_block("Pressure meters");
@@ -551,6 +553,27 @@ fn render_pressure_meter(
     use ratatui::symbols;
     let t = theme::get();
     let sev = Severity::from_usage(value);
+    if area.width < 34 {
+        let compact = Line::from(vec![
+            Span::styled(
+                format!("{:<9}", truncate(label, 9)),
+                Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{value:>5.1}% "),
+                Style::default()
+                    .fg(severity_color(sev))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                severity_label(sev),
+                Style::default().fg(severity_color(sev)),
+            ),
+        ]);
+        frame.render_widget(Paragraph::new(compact), area);
+        return;
+    }
+
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -786,6 +809,19 @@ fn render_alert_block(frame: &mut Frame, area: Rect, app: &AppState) {
                 ),
                 Style::default().fg(t.overlay1),
             ),
+        ]));
+    }
+
+    for event in app.events.iter().rev().take(3) {
+        lines.push(Line::from(vec![
+            Span::styled("Event: ", Style::default().fg(t.overlay0)),
+            Span::styled(
+                format!("{} {}  ", event.severity.symbol(), event.title),
+                Style::default()
+                    .fg(severity_color(event.severity))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(truncate(&event.detail, 46), Style::default().fg(t.overlay1)),
         ]));
     }
 

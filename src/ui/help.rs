@@ -37,7 +37,7 @@ pub fn help(frame: &mut Frame, area: Rect) {
             Span::styled("Toggle this panel", Style::default().fg(t.subtext0)),
         ]),
         Line::from(vec![
-            Span::styled(" 1-6           ", Style::default().fg(t.accent_teal)),
+            Span::styled(" 1-7           ", Style::default().fg(t.accent_teal)),
             Span::styled("Switch tab", Style::default().fg(t.subtext0)),
         ]),
         Line::from(vec![
@@ -47,6 +47,20 @@ pub fn help(frame: &mut Frame, area: Rect) {
         Line::from(vec![
             Span::styled(" S             ", Style::default().fg(t.accent_teal)),
             Span::styled("Cycle process sort", Style::default().fg(t.subtext0)),
+        ]),
+        Line::from(vec![
+            Span::styled(" K             ", Style::default().fg(t.accent_teal)),
+            Span::styled(
+                "Confirm SIGTERM for selected process",
+                Style::default().fg(t.subtext0),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(" /             ", Style::default().fg(t.accent_teal)),
+            Span::styled(
+                "Search processes; Esc clears",
+                Style::default().fg(t.subtext0),
+            ),
         ]),
         Line::from(vec![
             Span::styled(
@@ -92,7 +106,7 @@ pub fn help(frame: &mut Frame, area: Rect) {
             Style::default().fg(t.subtext0),
         )),
         Line::from(Span::styled(
-            "No daemon, no database, no network calls.",
+            "No daemon, no database, no outbound network calls.",
             Style::default().fg(t.subtext0),
         )),
     ];

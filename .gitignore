@@ -2,4 +2,5 @@
 *.profraw
 *.profdata
 .firecrawl/
-.codegraph/daemon.pid
+.codegraph/
+opencode.json

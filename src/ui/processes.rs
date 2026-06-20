@@ -14,29 +14,33 @@ pub fn processes_tab(frame: &mut Frame, area: Rect, app: &AppState, table_state:
     let t = theme::get();
 
     let show_search = app.is_search_mode || !app.process_search.is_empty();
-    let header_height = if show_search { 5 } else { 3 };
+    let show_message = app.process_action_message.is_some();
+    let header_height = 3 + if show_search { 2 } else { 0 } + if show_message { 2 } else { 0 };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(header_height), Constraint::Min(6)])
         .split(area);
 
-    let header_chunks = if show_search {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Length(2)])
-            .split(chunks[0])
-            .to_vec()
-    } else {
-        vec![chunks[0]]
-    };
+    let mut header_constraints = vec![Constraint::Length(3)];
+    if show_search {
+        header_constraints.push(Constraint::Length(2));
+    }
+    if show_message {
+        header_constraints.push(Constraint::Length(2));
+    }
+    let header_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(header_constraints)
+        .split(chunks[0])
+        .to_vec();
 
     let summary_line = Line::from(vec![
         styled(format!("\u{2630} {} processes", app.process_count), t.text),
         styled("  Sort: ", t.overlay0),
         styled(app.process_sort.label(), t.accent_blue).add_modifier(Modifier::BOLD),
         styled(
-            "  [S] cycle  [/] search  [K] kill  [\u{2191}/\u{2193}] select",
+            "  [S] sort  [/] search  [K] terminate  [\u{2191}/\u{2193}] select",
             t.overlay1,
         ),
     ]);
@@ -58,9 +62,31 @@ pub fn processes_tab(frame: &mut Frame, area: Rect, app: &AppState, table_state:
                 format!("{}{}", app.process_search, cursor),
                 Style::default().fg(t.text),
             ),
-            Span::styled("  (Esc to clear/exit)", Style::default().fg(t.overlay0)),
+            Span::styled(
+                "  (Enter closes, Esc clears)",
+                Style::default().fg(t.overlay0),
+            ),
         ]);
         frame.render_widget(Paragraph::new(search_line), header_chunks[1]);
+    }
+
+    if let Some(message) = &app.process_action_message {
+        let area = header_chunks[if show_search { 2 } else { 1 }];
+        let color = if message.starts_with("Could not") {
+            t.accent_red
+        } else {
+            t.accent_yellow
+        };
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  Status: ", Style::default().fg(t.overlay0)),
+                Span::styled(
+                    message.clone(),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
+            ])),
+            area,
+        );
     }
 
     let sorted = app.filtered_processes();
@@ -153,7 +179,7 @@ pub fn processes_tab(frame: &mut Frame, area: Rect, app: &AppState, table_state:
         let name = app.confirm_kill_name.as_deref().unwrap_or("unknown");
         let confirm_text = Line::from(vec![
             Span::styled(
-                format!("  Kill PID {pid} ({name})? "),
+                format!("  Send SIGTERM to PID {pid} ({name})? "),
                 Style::default()
                     .fg(t.accent_red)
                     .add_modifier(Modifier::BOLD),
@@ -163,7 +189,7 @@ pub fn processes_tab(frame: &mut Frame, area: Rect, app: &AppState, table_state:
         ]);
         frame.render_widget(
             Paragraph::new(confirm_text).block(panel_block_severity(
-                "\u{26a0} Confirm Kill",
+                "\u{26a0} Confirm Terminate",
                 crate::types::Severity::Critical,
             )),
             chunks[1],

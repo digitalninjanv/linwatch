@@ -18,7 +18,7 @@ pub fn header(frame: &mut Frame, area: Rect, app: &crate::state::AppState) {
         .split(area);
 
     let title = Span::styled(
-        format!("Fedora Monitor v{}", env!("CARGO_PKG_VERSION")),
+        format!("LinWatch v{}", env!("CARGO_PKG_VERSION")),
         Style::default()
             .fg(t.accent_blue)
             .add_modifier(Modifier::BOLD),

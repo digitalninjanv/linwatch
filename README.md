@@ -1,11 +1,11 @@
-# fedora-monitor
+# linwatch
 
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&color=0:0f172a,45:0ea5e9,100:22c55e&text=fedora-monitor&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Autonomous%20Linux%20Telemetry%20TUI&descAlignY=58&animation=fadeIn" alt="fedora-monitor animated header" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&color=0:0f172a,45:0ea5e9,100:22c55e&text=linwatch&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Autonomous%20Linux%20Telemetry%20TUI&descAlignY=58&animation=fadeIn" alt="linwatch animated header" />
 </p>
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=18&duration=2600&pause=700&color=38BDF8&center=true&vCenter=true&width=820&lines=Rust-powered+terminal+system+monitor;Fedora%2FLinux+observability+without+daemon+overhead;7-tab+TUI+with+GPU+monitoring+and+process+sparklines;Agent-ready+signals+for+CPU%2C+memory%2C+disk%2C+network%2C+GPU%2C+and+processes" alt="animated capability summary" />
+  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=18&duration=2600&pause=700&color=38BDF8&center=true&vCenter=true&width=820&lines=Rust-powered+Linux+terminal+monitor;Root-cause+insights+without+daemon+overhead;7-tab+TUI+with+GPU+monitoring+and+process+sparklines;Agent-ready+JSON+Lines+for+automation" alt="animated capability summary" />
 </p>
 
 <p align="center">
@@ -13,8 +13,8 @@
   <img src="https://img.shields.io/badge/Rust-2021-f97316?style=for-the-badge&logo=rust" alt="rust edition badge" />
   <img src="https://img.shields.io/badge/TUI-Ratatui-22c55e?style=for-the-badge" alt="ratatui badge" />
   <img src="https://img.shields.io/badge/Linux-%2Fproc%20native-38bdf8?style=for-the-badge&logo=linux" alt="linux proc badge" />
-  <a href="https://github.com/digitalninjanv/fedora-system-monitor/releases"><img src="https://img.shields.io/github/v/release/digitalninjanv/fedora-system-monitor?style=for-the-badge&logo=github&color=22c55e" alt="release badge" /></a>
-  <a href="https://github.com/digitalninjanv/fedora-system-monitor/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/digitalninjanv/fedora-system-monitor/release.yml?style=for-the-badge&logo=githubactions&label=build&color=38bdf8" alt="build badge" /></a>
+  <a href="https://github.com/digitalninjanv/linwatch/releases"><img src="https://img.shields.io/github/v/release/digitalninjanv/linwatch?style=for-the-badge&logo=github&color=22c55e" alt="release badge" /></a>
+  <a href="https://github.com/digitalninjanv/linwatch/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/digitalninjanv/linwatch/release.yml?style=for-the-badge&logo=githubactions&label=build&color=38bdf8" alt="build badge" /></a>
 </p>
 
 <p align="center">
@@ -41,14 +41,14 @@
 
 ## English
 
-`fedora-monitor` is a **modular terminal system monitor** for Fedora/Linux built with Rust, Ratatui, and Crossterm. It reads native Linux metrics directly from `/proc`, `/sys`, and `statvfs`, renders a **7-tab real-time TUI** with GPU monitoring, and keeps every sample accountable with `OK`, `Partial`, or `Degraded` status.
+`linwatch` is a **lightweight Linux TUI monitor** built with Rust, Ratatui, and Crossterm. It reads native Linux metrics directly from `/proc`, `/sys`, and `statvfs`, renders a **7-tab real-time TUI**, explains root causes, tracks recent events, and exports JSON Lines for automation.
 
 ### Design Principles
 
 - **No daemon** — runs in your terminal, nothing runs in the background
 - **No database** — no SQLite, no time-series DB, no logs
 - **No telemetry** — zero network calls, data never leaves your machine
-- **No shelling out** — no `df`, no `ps`, no `top`; pure kernel reads
+- **Minimal command use** — core metrics use `/proc`, `/sys`, and `statvfs`; optional local helpers enrich Git, systemd, and PCI labels
 - **Accountability-first** — every collector reports success or failure per tick
 
 The binary is ~1.2 MB (release) with a configurable TOML config file, keyboard-driven navigation, and panic-safe terminal recovery.
@@ -57,14 +57,14 @@ The binary is ~1.2 MB (release) with a configurable TOML config file, keyboard-d
 
 ## Indonesia
 
-`fedora-monitor` adalah **dashboard terminal modular** untuk Fedora/Linux yang dibuat dengan Rust, Ratatui, dan Crossterm. Membaca metrik Linux langsung dari `/proc`, `/sys`, dan `statvfs`, menampilkan **TUI 7 tab real-time** termasuk monitoring GPU, dan memberi status kualitas sampel: `OK`, `Partial`, atau `Degraded`.
+`linwatch` adalah **monitor TUI Linux ringan** yang dibuat dengan Rust, Ratatui, dan Crossterm. Membaca metrik Linux langsung dari `/proc`, `/sys`, dan `statvfs`, menampilkan **TUI 7 tab real-time**, menjelaskan root cause, melacak event terbaru, dan mengekspor JSON Lines untuk automation.
 
 ### Prinsip Desain
 
 - **Tanpa daemon** — berjalan di terminal, tidak ada proses latar
 - **Tanpa database** — tidak pakai SQLite, time-series DB, atau log
 - **Tanpa telemetri** — nol panggilan jaringan, data tidak pernah keluar
-- **Tanpa shelling out** — tidak pakai `df`, `ps`, atau `top`
+- **Command lokal minimal** — metrik inti memakai `/proc`, `/sys`, dan `statvfs`; helper lokal opsional memperkaya Git, systemd, dan label PCI
 - **Akuntabilitas** — setiap kolektor melaporkan sukses/gagal per tick
 
 Binary ~1.2 MB (release), konfigurasi via TOML, navigasi keyboard, dan panic-safe terminal recovery.
@@ -76,13 +76,13 @@ Binary ~1.2 MB (release), konfigurasi via TOML, navigasi keyboard, dan panic-saf
 ### Install
 
 ```bash
-curl -sSfL https://github.com/digitalninjanv/fedora-system-monitor/releases/latest/download/install.sh | sh
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/install.sh | sh
 ```
 
 ### Run
 
 ```bash
-fedora-monitor
+linwatch
 ```
 
 Press `Q` to quit. See [Installation](#installation) for all methods.
@@ -94,85 +94,86 @@ Press `Q` to quit. See [Installation](#installation) for all methods.
 ### One-liner (recommended)
 
 ```bash
-curl -sSfL https://github.com/digitalninjanv/fedora-system-monitor/releases/latest/download/install.sh | sh
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/install.sh | sh
 ```
 
 Automatically detects your CPU architecture (x86_64 or aarch64), downloads the matching prebuilt binary, and installs it to `~/.local/bin/`.
+The installer verifies the release archive against `sha256sums.txt` before installing.
 
 ### GitHub Releases
 
-Download from the [Releases page](https://github.com/digitalninjanv/fedora-system-monitor/releases):
+Download from the [Releases page](https://github.com/digitalninjanv/linwatch/releases):
 
 ```bash
 # x86_64
-curl -sSfL https://github.com/digitalninjanv/fedora-system-monitor/releases/latest/download/fedora-monitor-v0.1.0-x86_64-unknown-linux-gnu.tar.gz | tar -xz
-sudo install fedora-monitor /usr/local/bin/
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.1-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+sudo install linwatch /usr/local/bin/
 
 # aarch64
-curl -sSfL https://github.com/digitalninjanv/fedora-system-monitor/releases/latest/download/fedora-monitor-v0.1.0-aarch64-unknown-linux-gnu.tar.gz | tar -xz
-sudo install fedora-monitor /usr/local/bin/
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.1-aarch64-unknown-linux-gnu.tar.gz | tar -xz
+sudo install linwatch /usr/local/bin/
 ```
 
 ### Cargo (requires Rust toolchain)
 
 ```bash
-cargo install fedora-monitor
+cargo install linwatch
 ```
 
 ### Build from source
 
 ```bash
-git clone https://github.com/digitalninjanv/fedora-system-monitor.git
-cd fedora-system-monitor
+git clone https://github.com/digitalninjanv/linwatch.git
+cd linwatch
 cargo build --release
-./target/release/fedora-monitor
+./target/release/linwatch
 ```
 
 ### Uninstall
 
-To completely remove `fedora-monitor` from your system, delete the binary and configuration files:
+To completely remove `linwatch` from your system, delete the binary and configuration files:
 
 ```bash
 # Remove the binary (check whichever path you installed it to)
-rm -f ~/.local/bin/fedora-monitor
-sudo rm -f /usr/local/bin/fedora-monitor
+rm -f ~/.local/bin/linwatch
+sudo rm -f /usr/local/bin/linwatch
 
 # (Optional) Remove the configuration directory
-rm -rf ~/.config/fedora-monitor
+rm -rf ~/.config/linwatch
 ```
 
 ### Instalasi (Indonesia)
 
 **Pilihan 1: Satu baris (recommended)**
 ```bash
-curl -sSfL https://github.com/digitalninjanv/fedora-system-monitor/releases/latest/download/install.sh | sh
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/install.sh | sh
 ```
 Otomatis download binary yang cocok dengan arsitektur kamu dan pasang ke `~/.local/bin/`.
 
 **Pilihan 2: Cargo (butuh Rust)**
 ```bash
-cargo install fedora-monitor
+cargo install linwatch
 ```
 
 **Pilihan 3: Build dari source**
 ```bash
-git clone https://github.com/digitalninjanv/fedora-system-monitor.git
-cd fedora-system-monitor
+git clone https://github.com/digitalninjanv/linwatch.git
+cd linwatch
 cargo build --release
-./target/release/fedora-monitor
+./target/release/linwatch
 ```
 
 **Pilihan 4: Uninstall**
 
-Untuk menghapus `fedora-monitor` sepenuhnya dari sistem Anda, jalankan perintah berikut:
+Untuk menghapus `linwatch` sepenuhnya dari sistem Anda, jalankan perintah berikut:
 
 ```bash
 # Hapus binary (sesuaikan dengan lokasi instalasi Anda)
-rm -f ~/.local/bin/fedora-monitor
-sudo rm -f /usr/local/bin/fedora-monitor
+rm -f ~/.local/bin/linwatch
+sudo rm -f /usr/local/bin/linwatch
 
 # (Opsional) Hapus direktori konfigurasi
-rm -rf ~/.config/fedora-monitor
+rm -rf ~/.config/linwatch
 ```
 
 ---
@@ -182,13 +183,18 @@ rm -rf ~/.config/fedora-monitor
 ### Basic usage
 
 ```bash
-fedora-monitor                      # Start with default settings
-fedora-monitor -i 500ms             # Start with 500ms refresh rate
-fedora-monitor --interval=2s        # Start with 2s refresh rate
-fedora-monitor --json               # Print system snapshot as JSON, then exit
-fedora-monitor --json-pretty        # Print pretty-printed JSON snapshot, then exit
-fedora-monitor --help               # Show help
-fedora-monitor --version            # Show version
+linwatch                      # Start with default settings
+linwatch -i 500ms             # Start with 500ms refresh rate
+linwatch --interval=2s        # Start with 2s refresh rate
+linwatch --theme high_contrast # Start with high-contrast theme
+linwatch --json               # Print system snapshot as JSON, then exit
+linwatch --json-pretty        # Print pretty-printed JSON snapshot, then exit
+linwatch --json-lines         # Print one compact JSON snapshot line
+linwatch --watch-json         # Stream JSON Lines until interrupted
+linwatch --watch-json --samples 5  # Stream exactly five samples
+linwatch --check-config       # Validate config and exit
+linwatch --help               # Show help
+linwatch --version            # Show version
 ```
 
 ### Quick keys while running
@@ -208,7 +214,7 @@ fedora-monitor --version            # Show version
 |-----|--------|
 | `S` | Cycle sort order (CPU↓, CPU↑, MEM↓, MEM↑, PID↑, PID↓) |
 | `↑` / `↓` | Navigate process list selection |
-| `K` | Kill selected process (press again to confirm) |
+| `K` | Terminate selected process with SIGTERM (press again to confirm) |
 | `/` | Enter search/filter mode |
 
 ---
@@ -221,11 +227,11 @@ The default tab showing a high-level system health dashboard.
 
 | Element | Description |
 |---------|-------------|
-| **KPI Cards** | 5 metric cards showing CPU, Memory, Swap, Disk, and Network usage percentages |
-| **History Charts** | 120-second line charts for CPU and Memory with area fill |
-| **Pressure Gauges** | Visual indicator bars for resource pressure |
-| **Live Alerts** | Real-time threshold-based alerts (CPU, memory, disk, temperature, battery) |
-| **Health Score** | Overall system health score (0-100) in the top bar |
+| **Operator Focus** | Health score, root cause, data quality, thermal, GPU, and network summary |
+| **KPI Cards** | Four high-priority cards: CPU, GPU, Memory, and Root Disk |
+| **History Charts** | 120-sample line charts for CPU and Memory |
+| **Pressure Gauges** | Compact resource pressure meters with severity labels |
+| **Guidance Panel** | Root causes, live alerts, storage/GPU context, and recent event timeline |
 
 ### Tab 2: CPU
 
@@ -295,7 +301,7 @@ Interactive process management.
 | **Sort Modes** | Cycle via `S`: CPU↓, CPU↑, MEM↓, MEM↑, PID↑, PID↓ |
 | **High-risk Detection** | Processes exceeding 90% CPU marked with warning |
 | **Search** | Press `/` to filter processes by name |
-| **Kill** | Select process with `↑`/`↓`, press `K` twice to send SIGKILL |
+| **Terminate** | Select process with `↑`/`↓`, press `K` twice to send SIGTERM |
 
 ---
 
@@ -309,8 +315,14 @@ Interactive process management.
 | `-V`, `--version` | Print version number and exit |
 | `-i <value>`, `--interval <value>` | Set refresh interval. Supported: `500ms`, `750ms`, `1s`, `2s`, `5s` |
 | `--interval=<value>` | Alternative syntax for setting interval |
+| `--theme <name>` | Set visual theme. Supported: `default`, `high_contrast`, `colorblind` |
+| `--theme=<name>` | Alternative syntax for setting theme |
 | `--json` | Print single-shot JSON snapshot to stdout and exit |
 | `--json-pretty` | Print single-shot pretty-printed JSON snapshot to stdout and exit |
+| `--json-lines` | Print one compact JSON snapshot followed by a newline |
+| `--watch-json` | Stream JSON Lines at the active refresh interval until interrupted |
+| `--samples <n>` | Limit `--watch-json` or `--json-lines` output to `n` samples |
+| `--check-config` | Validate configuration and exit |
 
 ### Supported refresh intervals
 
@@ -324,33 +336,58 @@ Interactive process management.
 
 ### JSON output
 
-The `--json` and `--json-pretty` flags output a complete system snapshot as JSON:
+The `--json` and `--json-pretty` flags output a complete system snapshot as JSON. Delta-based fields such as CPU, network, disk I/O, and process CPU are sampled twice before output.
 
 ```bash
-fedora-monitor --json-pretty
+linwatch --json-pretty
 ```
 
 Example output structure:
 
 ```json
 {
-  "timestamp": "2026-06-20T03:51:52Z",
-  "cpu": { "usage_pct": 23.5, "load_1m": 1.2, "load_5m": 0.8, "load_15m": 0.6 },
-  "memory": { "total_kb": 16384000, "available_kb": 8192000, "swap_total_kb": 8388608, "swap_free_kb": 7340032 },
-  "disk": { "root_used_pct": 45 },
-  "network": { "total_rx": 1250000, "total_tx": 450000 },
-  "gpu": [ { "vendor": "AMD", "model": "...", "temp_c": 52.0, "usage_pct": 15.0 } ],
-  "processes": [ { "pid": 1234, "cpu": 5.2, "mem": 2.1, "command": "firefox" } ],
+  "timestamp": "1781939818",
+  "hostname": "workstation",
+  "kernel": "7.0.12-201.fc44.x86_64",
+  "os": "Fedora Linux 44",
+  "uptime": "01h 02m",
+  "cpu_usage_pct": 23.5,
+  "core_count": 8,
+  "memory_used_mb": 2847.8,
+  "memory_total_mb": 15607.0,
+  "memory_used_pct": 18.2,
+  "swap_used_mb": 0.0,
+  "swap_total_mb": 4096.0,
+  "disk_used_pct": 15,
+  "disk_used_gb": 34.8,
+  "disk_total_gb": 235.9,
+  "net_down_bps": 1250000.0,
+  "net_up_bps": 450000.0,
+  "battery_pct": 80,
+  "temperature_c": 61.0,
   "health_score": 92,
+  "health_status": "Healthy",
+  "process_count": 128,
+  "top_cpu_processes": [],
+  "top_mem_processes": [],
+  "alerts": [],
+  "root_causes": [],
+  "recent_events": [],
   "sample_status": "OK"
 }
+```
+
+JSON Lines mode is intended for automation and AI-assisted diagnostics:
+
+```bash
+linwatch --watch-json --samples 10 --interval 1s
 ```
 
 ---
 
 ## Configuration
 
-Create a TOML config file at `~/.config/fedora-monitor/config.toml`:
+Create a TOML config file at `~/.config/linwatch/config.toml`:
 
 ```toml
 # --- Refresh interval ---
@@ -361,6 +398,11 @@ refresh_interval = "1s"
 # --- Default tab on startup ---
 # Options: overview, cpu, gpu, memory, storage, network, processes
 default_tab = "overview"
+
+# --- Visual theme ---
+# Options: default, high_contrast, colorblind
+# high_contrast and colorblind are guarded by automated contrast tests.
+theme = "default"
 
 # --- Alert thresholds ---
 # When a metric exceeds its threshold, an alert appears in the Overview tab.
@@ -374,6 +416,7 @@ swap_alert    = 35.0    # Swap usage % (float)
 ```
 
 All fields are optional. Any missing fields use built-in defaults.
+Invalid config values are warned about and clamped or ignored safely. Use `linwatch --check-config` in scripts or packaging checks.
 
 ---
 
@@ -410,7 +453,7 @@ All fields are optional. Any missing fields use built-in defaults.
 | `S` | Cycle sort order: CPU↓ → CPU↑ → MEM↓ → MEM↑ → PID↑ → PID↓ |
 | `↑` | Move selection up in process list |
 | `↓` | Move selection down in process list |
-| `K` | Kill selected process (first press marks, second confirms with SIGKILL) |
+| `K` | Terminate selected process (first press marks, second confirms with SIGTERM) |
 | `/` | Enter search mode; type to filter processes by name; `Esc` to exit |
 
 ---
@@ -427,7 +470,7 @@ src/
 ├── state.rs        # State engine: update, delta math, history ring buffers, health, alerts
 └── ui/
     ├── mod.rs      # TUI module root, event loop, keyboard handler, tab dispatch
-    ├── theme.rs    # Catppuccin Mocha color theme
+    ├── theme.rs    # Default, high-contrast, and colorblind-safe themes
     ├── common.rs   # Shared UI utilities (panel blocks, formatting, layout helpers)
     ├── header.rs   # Top bar: hostname, OS, kernel, health score, battery, load avg
     ├── footer.rs   # Bottom bar: keyboard shortcuts, refresh rate, network rates
@@ -438,7 +481,7 @@ src/
     ├── memory.rs   # Memory tab: RAM + swap gauges, breakdown, trend
     ├── storage.rs  # Storage tab: root gauge, mount table, disk I/O
     ├── network.rs  # Network tab: total rates, per-interface table
-    └── processes.rs # Processes tab: sortable table, sparkline, search, kill
+    └── processes.rs # Processes tab: sortable table, sparkline, search, terminate
 ```
 
 ### Data flow
@@ -481,11 +524,12 @@ Lazy reads: battery every 5 ticks, thermal every 3 ticks. System info read once 
 | Storage | Mount usage, mount list | `/proc/mounts` + `statvfs` | Instant read |
 | Disk I/O | Per-device read/write throughput | `/proc/diskstats` | Delta-based |
 | Network | Per-interface RX/TX bytes | `/proc/net/dev` | Delta-based |
-| GPU | Vendor, model, temp, usage, power, freq, VRAM, RC6 | `/sys/class/drm` + `/sys/class/hwmon` | Instant read |
+| GPU | Vendor, model, temp, usage, power, freq, VRAM, RC6 | `/sys/class/drm` + `/sys/class/hwmon`, optional local PCI label cache | Instant read |
 | Processes | Top CPU/MEM, count, per-process sparkline | `/proc/<pid>/stat`, `/proc/<pid>/status` | Delta CPU, instant MEM |
 | Battery | Capacity %, charging status | `/sys/class/power_supply` | Every 5 ticks |
 | Thermal | Temperature in °C | `/sys/class/thermal` | Every 3 ticks |
 | Platform | OS, kernel, hostname, CPU model | `/etc/os-release`, `/proc/sys/kernel/*`, `/proc/cpuinfo` | Once at startup |
+| Local status | Failed units, Git dirty count | `systemctl`, `git status --porcelain` | Every 8 ticks |
 
 ---
 
@@ -530,7 +574,7 @@ The health score (0-100) is calculated using a penalty-based system:
 ### Prerequisites
 
 - Rust toolchain (install via [rustup](https://rustup.rs/))
-- Linux system with `/proc` and `/sys` (Fedora recommended, works on any Linux)
+- Linux system with `/proc` and `/sys` (works across common Linux distributions)
 
 ### Commands
 
@@ -551,12 +595,24 @@ cargo build --release      # Build optimized binary
 ### Release process
 
 ```bash
-# Create a new release
+cargo fmt --check
+cargo test --locked
+cargo clippy --all-targets --locked -- -D warnings
+cargo build --release --locked
+
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-GitHub Actions automatically builds binaries for x86_64 and aarch64, creates a GitHub Release, and uploads the archives.
+GitHub Actions automatically:
+
+- runs CI on pushes and pull requests
+- builds release binaries for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`
+- packages `linwatch`, `README.md`, `LICENSE`, and `install.sh`
+- publishes `.tar.gz` archives
+- generates and uploads `sha256sums.txt`
+
+The install script downloads both the archive and checksum file, verifies SHA256, then installs the binary.
 
 ---
 

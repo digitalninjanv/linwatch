@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 pub const HISTORY_LIMIT: usize = 120;
 pub const SPARKLINE_LIMIT: usize = 30;
+pub const EVENT_LIMIT: usize = 100;
 pub const REFRESH_INTERVALS_MS: [u64; 5] = [500, 750, 1_000, 2_000, 5_000];
 pub const BATTERY_READ_EVERY: u64 = 5;
 pub const THERMAL_READ_EVERY: u64 = 3;
@@ -116,6 +117,14 @@ pub struct ProcessSummary {
 
 #[derive(Clone, Serialize)]
 pub struct RootCause {
+    pub severity: Severity,
+    pub title: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct MonitorEvent {
+    pub tick: u64,
     pub severity: Severity,
     pub title: String,
     pub detail: String,
@@ -257,6 +266,7 @@ impl ProcessSort {
 pub struct MonitorConfig {
     pub refresh_interval: Option<String>,
     pub default_tab: Option<String>,
+    pub theme: Option<String>,
     pub cpu_alert: Option<f64>,
     pub mem_alert: Option<f64>,
     pub disk_alert: Option<u16>,
@@ -270,6 +280,9 @@ pub struct AppConfig {
     pub config: MonitorConfig,
     pub json_once: bool,
     pub json_pretty: bool,
+    pub json_lines: bool,
+    pub watch_json: bool,
+    pub samples: Option<u64>,
 }
 
 impl Default for AppConfig {
@@ -279,6 +292,9 @@ impl Default for AppConfig {
             config: MonitorConfig::default(),
             json_once: false,
             json_pretty: false,
+            json_lines: false,
+            watch_json: false,
+            samples: None,
         }
     }
 }
@@ -311,6 +327,7 @@ pub struct MonitorSnapshot {
     pub top_mem_processes: Vec<ProcessInfo>,
     pub alerts: Vec<String>,
     pub root_causes: Vec<RootCause>,
+    pub recent_events: Vec<MonitorEvent>,
     pub sample_status: String,
 }
 

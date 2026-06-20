@@ -46,31 +46,122 @@ fn main() -> Result<(), io::Error> {
 fn json_output(config: &AppConfig) -> Result<(), io::Error> {
     use state::AppState;
 
-    let app = AppState::new_raw(config);
-    let snapshot = app.to_snapshot();
+    if config.watch_json || config.json_lines {
+        let mut app = AppState::new_raw(config);
+        let mut stdout = io::stdout().lock();
+        let mut emitted = 0_u64;
+        loop {
+            write_snapshot(&mut stdout, &app.to_snapshot(), config.json_pretty)?;
+            use std::io::Write;
+            writeln!(stdout)?;
+            emitted += 1;
+            let target_samples =
+                config
+                    .samples
+                    .unwrap_or(if config.watch_json { u64::MAX } else { 1 });
+            if emitted >= target_samples {
+                return Ok(());
+            }
+            std::thread::sleep(app.refresh_rate());
+            app.update();
+        }
+    }
 
-    if config.json_pretty {
-        serde_json::to_writer_pretty(io::stdout().lock(), &snapshot)
+    let app = AppState::new_raw(config);
+    write_snapshot(
+        &mut io::stdout().lock(),
+        &app.to_snapshot(),
+        config.json_pretty,
+    )
+}
+
+fn write_snapshot<W: io::Write>(
+    writer: &mut W,
+    snapshot: &types::MonitorSnapshot,
+    pretty: bool,
+) -> Result<(), io::Error> {
+    if pretty {
+        serde_json::to_writer_pretty(writer, snapshot)
     } else {
-        serde_json::to_writer(io::stdout().lock(), &snapshot)
+        serde_json::to_writer(writer, snapshot)
     }
     .map_err(io::Error::other)
 }
 
 fn load_config() -> MonitorConfig {
     let config_dir = dirs_config_path();
-    let config_path = config_dir.join("fedora-monitor").join("config.toml");
+    let config_path = config_dir.join("linwatch").join("config.toml");
 
     if !config_path.exists() {
         return MonitorConfig::default();
     }
 
     match fs::read_to_string(&config_path) {
-        Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
-            eprintln!("Warning: config parse error: {e}");
-            MonitorConfig::default()
-        }),
+        Ok(content) => toml::from_str(&content)
+            .map(validate_config)
+            .unwrap_or_else(|e| {
+                eprintln!("Warning: config parse error: {e}");
+                MonitorConfig::default()
+            }),
         Err(_) => MonitorConfig::default(),
+    }
+}
+
+fn validate_config(mut config: MonitorConfig) -> MonitorConfig {
+    if let Some(theme) = config.theme.as_deref() {
+        if parse_theme_name(theme).is_err() {
+            eprintln!("Warning: unsupported theme in config: {theme}; using default");
+            config.theme = None;
+        }
+    }
+
+    if let Some(tab) = config.default_tab.as_deref() {
+        if !matches!(
+            tab,
+            "overview"
+                | "cpu"
+                | "gpu"
+                | "igpu"
+                | "memory"
+                | "mem"
+                | "storage"
+                | "disk"
+                | "network"
+                | "net"
+                | "processes"
+                | "proc"
+        ) {
+            eprintln!("Warning: unsupported default_tab in config: {tab}; using overview");
+            config.default_tab = None;
+        }
+    }
+
+    clamp_f64(&mut config.cpu_alert, 1.0, 100.0, "cpu_alert");
+    clamp_f64(&mut config.mem_alert, 1.0, 100.0, "mem_alert");
+    clamp_f64(&mut config.temp_alert, 1.0, 120.0, "temp_alert");
+    clamp_f64(&mut config.swap_alert, 0.0, 100.0, "swap_alert");
+    clamp_u16(&mut config.disk_alert, 1, 100, "disk_alert");
+    clamp_u16(&mut config.battery_alert, 1, 100, "battery_alert");
+    config
+}
+
+fn clamp_f64(value: &mut Option<f64>, min: f64, max: f64, name: &str) {
+    if let Some(current) = *value {
+        let clamped = current.clamp(min, max);
+        if (clamped - current).abs() > f64::EPSILON {
+            eprintln!("Warning: {name} out of range; clamped to {clamped}");
+            *value = Some(clamped);
+        }
+    }
+}
+
+fn clamp_u16(value: &mut Option<u16>, min: u16, max: u16, name: &str) {
+    if let Some(current) = *value {
+        let clamped = current.clamp(min, max);
+        if clamped != current {
+            eprintln!("Warning: {name} out of range; clamped to {clamped}");
+            *value = Some(clamped);
+        }
     }
 }
 
@@ -88,6 +179,9 @@ fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
         config,
         json_once: false,
         json_pretty: false,
+        json_lines: false,
+        watch_json: false,
+        samples: None,
     };
     let mut args = env::args().skip(1);
 
@@ -98,7 +192,11 @@ fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
                 return Ok(None);
             }
             "-V" | "--version" => {
-                println!("fedora-monitor {}", env!("CARGO_PKG_VERSION"));
+                println!("linwatch {}", env!("CARGO_PKG_VERSION"));
+                return Ok(None);
+            }
+            "--check-config" => {
+                println!("Config OK");
                 return Ok(None);
             }
             "-i" | "--interval" => {
@@ -111,6 +209,16 @@ fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
                 let value = arg.trim_start_matches("--interval=");
                 app_config.refresh_index = parse_interval_index(value)?;
             }
+            "--theme" => {
+                let Some(value) = args.next() else {
+                    return Err(invalid_arg("--theme requires a value"));
+                };
+                app_config.config.theme = Some(parse_theme_name(&value)?.to_string());
+            }
+            _ if arg.starts_with("--theme=") => {
+                let value = arg.trim_start_matches("--theme=");
+                app_config.config.theme = Some(parse_theme_name(value)?.to_string());
+            }
             "--json" => {
                 app_config.json_once = true;
             }
@@ -118,11 +226,51 @@ fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
                 app_config.json_once = true;
                 app_config.json_pretty = true;
             }
+            "--json-lines" => {
+                app_config.json_once = true;
+                app_config.json_lines = true;
+            }
+            "--watch-json" => {
+                app_config.json_once = true;
+                app_config.watch_json = true;
+                app_config.json_lines = true;
+            }
+            "--samples" => {
+                let Some(value) = args.next() else {
+                    return Err(invalid_arg("--samples requires a value"));
+                };
+                app_config.samples = Some(parse_sample_count(&value)?);
+            }
+            _ if arg.starts_with("--samples=") => {
+                let value = arg.trim_start_matches("--samples=");
+                app_config.samples = Some(parse_sample_count(value)?);
+            }
             _ => return Err(invalid_arg(format!("unknown argument: {arg}"))),
         }
     }
 
     Ok(Some(app_config))
+}
+
+fn parse_theme_name(value: &str) -> Result<&str, io::Error> {
+    let normalized = value.trim();
+    match normalized {
+        "default" | "high_contrast" | "high-contrast" | "colorblind" | "colorblind-safe" => {
+            Ok(normalized)
+        }
+        _ => Err(invalid_arg(format!(
+            "unsupported theme: {value}. Supported: default, high_contrast, colorblind"
+        ))),
+    }
+}
+
+fn parse_sample_count(value: &str) -> Result<u64, io::Error> {
+    value
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|count| *count > 0)
+        .ok_or_else(|| invalid_arg(format!("invalid sample count: {value}")))
 }
 
 fn resolve_interval_index(value: Option<&str>) -> usize {
@@ -166,17 +314,37 @@ fn invalid_arg<T: Into<String>>(message: T) -> io::Error {
 
 fn print_cli_help() {
     println!(
-        "fedora-monitor {}\n\n\
-         Usage:\n  fedora-monitor [OPTIONS]\n\n\
-         Options:\n  -i, --interval <VALUE>  Refresh interval: 500ms, 750ms, 1s, 2s, 5s\n\
-         --json                  Single-shot JSON snapshot to stdout\n\
-         --json-pretty           Single-shot pretty-printed JSON\n\
-         -h, --help              Show this help\n  -V, --version           Show version\n\n\
-         Config:\n  ~/.config/fedora-monitor/config.toml\n\n\
-         Keys:\n  Q/Esc  Exit\n  R      Refresh now\n  H      Toggle help\n\
-         1-6    Switch tab\n  Tab    Next tab\n  S      Cycle process sort\n\
-         K      Kill selected process (press again to confirm)\n\
-         /      Search process\n  +/-    Change interval",
+        "\
+linwatch {}
+
+Usage:
+  linwatch [OPTIONS]
+
+Options:
+  -i, --interval <VALUE>  Refresh interval: 500ms, 750ms, 1s, 2s, 5s
+      --theme <NAME>       Theme: default, high_contrast, colorblind
+      --json              Single-shot JSON snapshot to stdout
+      --json-pretty       Single-shot pretty-printed JSON
+      --json-lines        Emit one JSON snapshot as a line
+      --watch-json        Stream JSON Lines until interrupted
+      --samples <N>       Limit JSON Lines samples
+      --check-config      Validate configuration and exit
+  -h, --help              Show this help
+  -V, --version           Show version
+
+Config:
+  ~/.config/linwatch/config.toml
+
+Keys:
+  Q/Esc  Exit
+  R      Refresh now
+  H      Toggle help
+  1-7    Switch tab
+  Tab    Next tab
+  S      Cycle process sort
+  K      Terminate selected process with SIGTERM (press again to confirm)
+  /      Search process
+  +/-    Change interval",
         env!("CARGO_PKG_VERSION")
     );
 }

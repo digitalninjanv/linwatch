@@ -27,6 +27,7 @@ pub fn run_app<B: Backend>(
     terminal: &mut ratatui::Terminal<B>,
     config: AppConfig,
 ) -> Result<(), std::io::Error> {
+    theme::configure(config.config.theme.as_deref());
     let mut app = AppState::new(config);
     let mut last_tick = Instant::now();
     let mut was_resizing = false;
@@ -51,6 +52,11 @@ pub fn run_app<B: Backend>(
                         match key.code {
                             crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Enter => {
                                 app.is_search_mode = false;
+                                if matches!(key.code, crossterm::event::KeyCode::Esc) {
+                                    app.process_search.clear();
+                                    app.process_selected = 0;
+                                    process_table_state.select(Some(0));
+                                }
                             }
                             crossterm::event::KeyCode::Backspace => {
                                 app.process_search.pop();
@@ -73,11 +79,16 @@ pub fn run_app<B: Backend>(
                                     break;
                                 }
                             }
-                            crossterm::event::KeyCode::Char('q') => {
+                            crossterm::event::KeyCode::Char('q')
+                            | crossterm::event::KeyCode::Char('Q') => {
                                 break;
                             }
-                            crossterm::event::KeyCode::Char('r') => app.update(),
-                            crossterm::event::KeyCode::Char('h') => app.show_help = !app.show_help,
+                            crossterm::event::KeyCode::Char('r')
+                            | crossterm::event::KeyCode::Char('R') => app.update(),
+                            crossterm::event::KeyCode::Char('h')
+                            | crossterm::event::KeyCode::Char('H') => {
+                                app.show_help = !app.show_help
+                            }
                             crossterm::event::KeyCode::Char('+')
                             | crossterm::event::KeyCode::Char('=') => app.faster_refresh(),
                             crossterm::event::KeyCode::Char('-')
@@ -109,7 +120,8 @@ pub fn run_app<B: Backend>(
                             crossterm::event::KeyCode::Char('7') => {
                                 app.active_tab = ViewTab::Processes;
                             }
-                            crossterm::event::KeyCode::Char('s') => app.process_sort.cycle(),
+                            crossterm::event::KeyCode::Char('s')
+                            | crossterm::event::KeyCode::Char('S') => app.process_sort.cycle(),
                             crossterm::event::KeyCode::Char('/') => {
                                 if app.active_tab == ViewTab::Processes {
                                     app.is_search_mode = true;
@@ -118,7 +130,8 @@ pub fn run_app<B: Backend>(
                                     process_table_state.select(Some(0));
                                 }
                             }
-                            crossterm::event::KeyCode::Char('k') => {
+                            crossterm::event::KeyCode::Char('k')
+                            | crossterm::event::KeyCode::Char('K') => {
                                 if app.active_tab == ViewTab::Processes {
                                     app.request_kill();
                                     process_table_state.select(Some(app.process_selected));
@@ -216,6 +229,39 @@ fn render_tab_content(
         ViewTab::Network => network::network_tab(frame, area, app),
         ViewTab::Processes => {
             processes::processes_tab(frame, area, app, process_table_state);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn renders_all_tabs_across_common_terminal_sizes() {
+        for (width, height) in [(80, 24), (100, 30), (120, 40), (160, 48)] {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).expect("test backend");
+            let mut app = AppState::new(AppConfig::default());
+            let mut table_state = ratatui::widgets::TableState::default();
+
+            for tab in ViewTab::all() {
+                app.active_tab = *tab;
+                terminal
+                    .draw(|frame| {
+                        app.terminal_width = frame.size().width;
+                        ui(frame, &app, &mut table_state);
+                    })
+                    .expect("render tab");
+
+                let buffer = terminal.backend().buffer();
+                assert!(
+                    buffer.content.iter().any(|cell| cell.symbol() != " "),
+                    "blank render for {:?} at {width}x{height}",
+                    tab
+                );
+            }
         }
     }
 }

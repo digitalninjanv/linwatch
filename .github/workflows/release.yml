@@ -3,65 +3,84 @@ name: Release
 on:
   push:
     tags:
-      - v*
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: linwatch
+
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: build ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
+        include:
+          - target: x86_64-unknown-linux-gnu
+            archive: linwatch-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+          - target: aarch64-unknown-linux-gnu
+            archive: linwatch-${{ github.ref_name }}-aarch64-unknown-linux-gnu.tar.gz
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install cross-compilation dependencies
-        if: matrix.target != 'x86_64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.target }}
+
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
           target: ${{ matrix.target }}
+          args: "--release --locked"
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package binary
+      - name: Package archive
         run: |
-          BIN="target/${{ matrix.target }}/release/fedora-monitor"
-          ARCHIVE="fedora-monitor-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
-          tar -czf "$ARCHIVE" -C "$(dirname "$BIN")" "$(basename "$BIN")"
-          echo "archive=$ARCHIVE" >> $GITHUB_ENV
+          set -euo pipefail
+          mkdir -p dist/package
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}" dist/package/
+          cp README.md LICENSE install.sh dist/package/
+          tar -C dist/package -czf "dist/${{ matrix.archive }}" .
 
-      - name: Upload artifact
+      - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
-          path: ${{ env.archive }}
+          name: ${{ matrix.archive }}
+          path: dist/${{ matrix.archive }}
+          if-no-files-found: error
 
-  release:
+  publish:
+    name: publish release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
-      - name: Create release
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.tar.gz > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ./*/*.tar.gz
-            install.sh
+            dist/*.tar.gz
+            dist/sha256sums.txt
           generate_release_notes: true

@@ -70,6 +70,13 @@ pub struct AppState {
     pub zombie_count: usize,
     pub confirm_kill_pid: Option<u32>,
     pub confirm_kill_name: Option<String>,
+    pub process_action_message: Option<String>,
+    pub events: VecDeque<MonitorEvent>,
+    pub cpu_pressure_ticks: u8,
+    pub mem_pressure_ticks: u8,
+    pub thermal_pressure_ticks: u8,
+    pub previous_sample_status_label: String,
+    pub previous_health_band: Severity,
 }
 
 impl AppState {
@@ -160,6 +167,13 @@ impl AppState {
             zombie_count: 0,
             confirm_kill_pid: None,
             confirm_kill_name: None,
+            process_action_message: None,
+            events: VecDeque::with_capacity(EVENT_LIMIT),
+            cpu_pressure_ticks: 0,
+            mem_pressure_ticks: 0,
+            thermal_pressure_ticks: 0,
+            previous_sample_status_label: String::from("OK"),
+            previous_health_band: Severity::Ok,
         };
 
         state.update();
@@ -172,6 +186,7 @@ impl AppState {
             config: MonitorConfig {
                 refresh_interval: None,
                 default_tab: None,
+                theme: config.config.theme.clone(),
                 cpu_alert: config.config.cpu_alert,
                 mem_alert: config.config.mem_alert,
                 disk_alert: config.config.disk_alert,
@@ -181,7 +196,11 @@ impl AppState {
             },
             json_once: false,
             json_pretty: false,
+            json_lines: false,
+            watch_json: false,
+            samples: None,
         });
+        std::thread::sleep(state.refresh_rate().min(Duration::from_millis(750)));
         state.update();
         state
     }
@@ -225,6 +244,7 @@ impl AppState {
             top_mem_processes: self.top_mem_processes.clone(),
             alerts: self.alerts.clone(),
             root_causes: self.root_causes.clone(),
+            recent_events: self.events.iter().rev().take(20).cloned().collect(),
             sample_status: self.sample_status().to_string(),
         }
     }
@@ -465,9 +485,11 @@ impl AppState {
         }
 
         self.update_network_rates();
+        self.update_sustained_pressure();
         self.alerts = build_alerts(self);
         self.root_causes = build_root_causes(self);
         self.health_score = calculate_health_score(self);
+        self.record_state_events();
         self.last_sample_at = Instant::now();
 
         // Clamp selected process index to current list.
@@ -520,14 +542,16 @@ impl AppState {
                         let (prev_rx, prev_tx) = previous.get(name).copied().unwrap_or((rx, tx));
                         NetInterface {
                             name: name.clone(),
-                            down_bps: ((rx.saturating_sub(prev_rx)) as f64) / elapsed,
-                            up_bps: ((tx.saturating_sub(prev_tx)) as f64) / elapsed,
+                            down_bps: normalize_rate(
+                                ((rx.saturating_sub(prev_rx)) as f64) / elapsed,
+                            ),
+                            up_bps: normalize_rate(((tx.saturating_sub(prev_tx)) as f64) / elapsed),
                         }
                     })
                     .collect();
             }
-            self.net_down_bps = self.interfaces.iter().map(|i| i.down_bps).sum();
-            self.net_up_bps = self.interfaces.iter().map(|i| i.up_bps).sum();
+            self.net_down_bps = normalize_rate(self.interfaces.iter().map(|i| i.down_bps).sum());
+            self.net_up_bps = normalize_rate(self.interfaces.iter().map(|i| i.up_bps).sum());
             push_history(&mut self.net_down_history, self.counter, self.net_down_bps);
             push_history(&mut self.net_up_history, self.counter, self.net_up_bps);
             self.previous_net = Some((current, now));
@@ -545,8 +569,12 @@ impl AppState {
                         let (prev_rd, prev_wr) = previous.get(name).copied().unwrap_or((rd, wr));
                         DiskIoInfo {
                             device: name.clone(),
-                            read_bps: ((rd.saturating_sub(prev_rd)) as f64 * 512.0) / elapsed,
-                            write_bps: ((wr.saturating_sub(prev_wr)) as f64 * 512.0) / elapsed,
+                            read_bps: normalize_rate(
+                                ((rd.saturating_sub(prev_rd)) as f64 * 512.0) / elapsed,
+                            ),
+                            write_bps: normalize_rate(
+                                ((wr.saturating_sub(prev_wr)) as f64 * 512.0) / elapsed,
+                            ),
                         }
                     })
                     .collect();
@@ -593,13 +621,24 @@ impl AppState {
         {
             match self.confirm_kill_pid {
                 Some(pid) if pid == p.0 => {
-                    let _ = self.execute_kill(p.0);
+                    match self.execute_kill(p.0) {
+                        Ok(()) => {
+                            self.process_action_message =
+                                Some(format!("Sent SIGTERM to PID {} ({})", p.0, p.1));
+                        }
+                        Err(err) => {
+                            self.process_action_message =
+                                Some(format!("Could not terminate PID {}: {}", p.0, err));
+                        }
+                    }
                     self.confirm_kill_pid = None;
                     self.confirm_kill_name = None;
                 }
                 _ => {
                     self.confirm_kill_pid = Some(p.0);
                     self.confirm_kill_name = Some(p.1);
+                    self.process_action_message =
+                        Some(format!("Press K again to send SIGTERM to PID {}", p.0));
                 }
             }
         }
@@ -608,14 +647,16 @@ impl AppState {
     pub fn cancel_kill(&mut self) {
         self.confirm_kill_pid = None;
         self.confirm_kill_name = None;
+        self.process_action_message = Some(String::from("Process action cancelled"));
     }
 
     fn execute_kill(&mut self, pid: u32) -> std::io::Result<()> {
-        std::process::Command::new("kill")
-            .arg("-9")
-            .arg(pid.to_string())
-            .output()?;
-        Ok(())
+        let result = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
     }
 
     pub fn primary_gpu(&self) -> Option<&GpuInfo> {
@@ -623,6 +664,183 @@ impl AppState {
             .iter()
             .find(|gpu| gpu.kind == "iGPU")
             .or_else(|| self.gpus.first())
+    }
+
+    fn update_sustained_pressure(&mut self) {
+        self.cpu_pressure_ticks =
+            pressure_tick(self.cpu_pressure_ticks, self.cpu_usage >= self.cpu_alert);
+        self.mem_pressure_ticks =
+            pressure_tick(self.mem_pressure_ticks, self.mem_pct() >= self.mem_alert);
+        self.thermal_pressure_ticks = pressure_tick(
+            self.thermal_pressure_ticks,
+            self.temp_c.is_some_and(|temp| temp >= self.temp_alert),
+        );
+    }
+
+    fn record_state_events(&mut self) {
+        if self.cpu_pressure_ticks == 3 {
+            let detail = self
+                .top_cpu_processes
+                .first()
+                .map(|p| {
+                    format!(
+                        "CPU stayed above threshold; top process {} PID {} at {:.1}%",
+                        p.name, p.pid, p.cpu_pct
+                    )
+                })
+                .unwrap_or_else(|| String::from("CPU stayed above threshold"));
+            self.push_event(Severity::Critical, "Sustained CPU pressure", detail);
+        }
+
+        if self.mem_pressure_ticks == 3 {
+            let detail = self
+                .top_mem_processes
+                .first()
+                .map(|p| {
+                    format!(
+                        "Memory stayed above threshold; top process {} PID {} uses {:.1} MB",
+                        p.name, p.pid, p.mem_mb
+                    )
+                })
+                .unwrap_or_else(|| String::from("Memory stayed above threshold"));
+            self.push_event(Severity::Critical, "Sustained memory pressure", detail);
+        }
+
+        if self.thermal_pressure_ticks == 3 {
+            self.push_event(
+                Severity::Critical,
+                "Sustained thermal pressure",
+                format!(
+                    "Temperature stayed above threshold at {}",
+                    self.temp_c
+                        .map(|temp| format!("{temp:.1}C"))
+                        .unwrap_or_else(|| String::from("unknown"))
+                ),
+            );
+        }
+
+        if self.zombie_count > 0 && self.tick_count == 1 {
+            self.push_event(
+                Severity::Warn,
+                "Zombie processes detected",
+                format!("{} zombie processes are present", self.zombie_count),
+            );
+        }
+
+        if !self.failed_units.is_empty()
+            && (self.tick_count == 1 || self.tick_count.is_multiple_of(SYSTEMD_READ_EVERY))
+        {
+            self.push_event(
+                Severity::Critical,
+                "Failed systemd units",
+                format!(
+                    "{} failed unit(s), first: {}",
+                    self.failed_units.len(),
+                    self.failed_units[0].unit
+                ),
+            );
+        }
+
+        if let Some(drive) = self
+            .storage_health
+            .iter()
+            .find(|drive| drive.risk != Severity::Ok)
+        {
+            if self.tick_count == 1 || self.tick_count.is_multiple_of(STORAGE_HEALTH_READ_EVERY) {
+                self.push_event(
+                    drive.risk,
+                    "Storage health warning",
+                    format!("{}: {}", drive.device, drive.note),
+                );
+            }
+        }
+
+        let sample_status = self.sample_status().to_string();
+        if sample_status != self.previous_sample_status_label {
+            let severity = match sample_status.as_str() {
+                "OK" => Severity::Ok,
+                "Partial" => Severity::Warn,
+                _ => Severity::Critical,
+            };
+            let detail = if self.degraded_sources.is_empty() {
+                format!("{} -> {}", self.previous_sample_status_label, sample_status)
+            } else {
+                format!(
+                    "{} -> {} ({})",
+                    self.previous_sample_status_label,
+                    sample_status,
+                    self.degraded_sources.join(", ")
+                )
+            };
+            self.push_event(severity, "Sample quality changed", detail);
+            self.previous_sample_status_label = sample_status;
+        }
+
+        let health_band = Severity::from_health(self.health_score as f64);
+        if health_band != self.previous_health_band {
+            self.push_event(
+                health_band,
+                "Health band changed",
+                format!(
+                    "{} -> {} at {}%",
+                    severity_label_for_event(self.previous_health_band),
+                    severity_label_for_event(health_band),
+                    self.health_score
+                ),
+            );
+            self.previous_health_band = health_band;
+        }
+    }
+
+    fn push_event(
+        &mut self,
+        severity: Severity,
+        title: impl Into<String>,
+        detail: impl Into<String>,
+    ) {
+        let title = title.into();
+        let detail = detail.into();
+        if self
+            .events
+            .back()
+            .is_some_and(|event| event.title == title && event.detail == detail)
+        {
+            return;
+        }
+        if self.events.len() >= EVENT_LIMIT {
+            self.events.pop_front();
+        }
+        self.events.push_back(MonitorEvent {
+            tick: self.tick_count,
+            severity,
+            title,
+            detail,
+        });
+    }
+}
+
+fn pressure_tick(current: u8, active: bool) -> u8 {
+    if active {
+        current.saturating_add(1)
+    } else {
+        0
+    }
+}
+
+fn severity_label_for_event(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Ok => "Healthy",
+        Severity::Warn => "Attention",
+        Severity::Critical => "Critical",
+        Severity::Neutral => "Monitoring",
+    }
+}
+
+fn sustained_suffix(ticks: u8) -> String {
+    if ticks >= 3 {
+        format!(" (sustained {ticks} samples)")
+    } else {
+        String::new()
     }
 }
 
@@ -650,6 +868,14 @@ fn push_history(history: &mut VecDeque<(f64, f64)>, counter: u64, value: f64) {
         history.pop_front();
     }
     history.push_back((counter as f64, value));
+}
+
+fn normalize_rate(value: f64) -> f64 {
+    if value.abs() < f64::EPSILON {
+        0.0
+    } else {
+        value
+    }
 }
 
 pub fn build_alerts(app: &AppState) -> Vec<String> {
@@ -719,8 +945,11 @@ pub fn build_root_causes(app: &AppState) -> Vec<RootCause> {
     if app.cpu_usage >= app.cpu_alert {
         let detail = if let Some(proc_info) = top_cpu {
             format!(
-                "{} (PID {}) is the top CPU consumer at {:.1}%",
-                proc_info.name, proc_info.pid, proc_info.cpu_pct
+                "{} (PID {}) is the top CPU consumer at {:.1}%{}",
+                proc_info.name,
+                proc_info.pid,
+                proc_info.cpu_pct,
+                sustained_suffix(app.cpu_pressure_ticks)
             )
         } else {
             String::from("System-wide CPU pressure is high, process sample unavailable")
@@ -735,8 +964,11 @@ pub fn build_root_causes(app: &AppState) -> Vec<RootCause> {
     if app.mem_pct() >= app.mem_alert {
         let detail = if let Some(proc_info) = top_mem {
             format!(
-                "{} (PID {}) uses {:.1} MB RAM",
-                proc_info.name, proc_info.pid, proc_info.mem_mb
+                "{} (PID {}) uses {:.1} MB RAM{}",
+                proc_info.name,
+                proc_info.pid,
+                proc_info.mem_mb,
+                sustained_suffix(app.mem_pressure_ticks)
             )
         } else {
             String::from("Memory pressure is high, top memory process unavailable")
@@ -765,8 +997,9 @@ pub fn build_root_causes(app: &AppState) -> Vec<RootCause> {
                 severity: Severity::Critical,
                 title: String::from("Thermal pressure"),
                 detail: format!(
-                    "CPU temperature is {:.0}\u{b0}C; cooling or workload may need attention",
-                    temp
+                    "CPU temperature is {:.0}\u{b0}C; cooling or workload may need attention{}",
+                    temp,
+                    sustained_suffix(app.thermal_pressure_ticks)
                 ),
             });
         } else if temp >= 70.0 {
@@ -1000,6 +1233,13 @@ mod tests {
             zombie_count: 0,
             confirm_kill_pid: None,
             confirm_kill_name: None,
+            process_action_message: None,
+            events: VecDeque::new(),
+            cpu_pressure_ticks: 0,
+            mem_pressure_ticks: 0,
+            thermal_pressure_ticks: 0,
+            previous_sample_status_label: String::from("OK"),
+            previous_health_band: Severity::Ok,
         }
     }
 

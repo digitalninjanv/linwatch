@@ -1,14 +1,14 @@
 [package]
-name = "fedora-monitor"
+name = "linwatch"
 version = "0.1.1"
 edition = "2021"
-description = "Lightweight Fedora/Linux terminal system monitor with accountability-focused metrics."
+description = "Lightweight Linux TUI monitor with root-cause insights, event timeline, and JSON automation."
 readme = "README.md"
-keywords = ["fedora", "linux", "monitor", "tui", "ratatui", "system-monitor"]
+keywords = ["linux", "monitor", "tui", "observability", "ratatui"]
 categories = ["command-line-utilities"]
 license = "MIT"
-repository = "https://github.com/digitalninjanv/fedora-system-monitor"
-homepage = "https://github.com/digitalninjanv/fedora-system-monitor"
+repository = "https://github.com/digitalninjanv/linwatch"
+homepage = "https://github.com/digitalninjanv/linwatch"
 
 [dependencies]
 ratatui = "0.26"

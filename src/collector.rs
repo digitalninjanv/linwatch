@@ -558,7 +558,85 @@ pub fn read_systemd_failed_units(limit: usize) -> Option<Vec<SystemdUnitIssue>> 
 }
 
 pub fn read_storage_health() -> Option<Vec<StorageHealth>> {
-    None // Placeholder for complex SMART data
+    let entries = fs::read_dir("/sys/block").ok()?;
+    let mut drives = Vec::new();
+
+    for entry in entries.flatten() {
+        let block_path = entry.path();
+        let Some(device) = block_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if is_virtual_block_device(device) {
+            continue;
+        }
+
+        let device_path = block_path.join("device");
+        let model = read_trimmed_path(device_path.join("model"))
+            .or_else(|| read_trimmed_path(device_path.join("name")))
+            .unwrap_or_else(|| String::from("unknown"));
+        let rotational = read_trimmed_path(block_path.join("queue/rotational"))
+            .map(|value| value == "1")
+            .unwrap_or(false);
+        let kind = if device.starts_with("nvme") {
+            "NVMe"
+        } else if rotational {
+            "HDD"
+        } else {
+            "SSD"
+        }
+        .to_string();
+        let temp_c = read_block_device_temp_c(&device_path);
+        let risk = match temp_c {
+            Some(temp) if temp >= 85.0 => Severity::Critical,
+            Some(temp) if temp >= 70.0 => Severity::Warn,
+            _ => Severity::Ok,
+        };
+        let note = match (risk, temp_c) {
+            (Severity::Critical, Some(temp)) => format!("temperature critical at {temp:.0}C"),
+            (Severity::Warn, Some(temp)) => format!("temperature elevated at {temp:.0}C"),
+            (_, Some(_)) => String::from("temperature sensor OK"),
+            _ => String::from("basic sysfs health; no SMART sensor exposed"),
+        };
+
+        drives.push(StorageHealth {
+            device: device.to_string(),
+            model,
+            kind,
+            temp_c,
+            critical_warning: None,
+            media_errors: None,
+            risk,
+            note,
+        });
+    }
+
+    drives.sort_by(|a, b| a.device.cmp(&b.device));
+    Some(drives)
+}
+
+fn is_virtual_block_device(device: &str) -> bool {
+    device.starts_with("loop")
+        || device.starts_with("ram")
+        || device.starts_with("dm-")
+        || device.starts_with("zram")
+}
+
+fn read_block_device_temp_c(device_path: &Path) -> Option<f64> {
+    let hwmon_root = device_path.join("hwmon");
+    let entries = fs::read_dir(hwmon_root).ok()?;
+    for entry in entries.flatten() {
+        let hwmon = entry.path();
+        for index in 1..=8 {
+            let temp_path = hwmon.join(format!("temp{index}_input"));
+            if let Some(raw) = read_sys_u64_path(&temp_path) {
+                let temp_c = raw as f64 / 1000.0;
+                if (0.0..=150.0).contains(&temp_c) {
+                    return Some(temp_c);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn is_drm_card(name: &str) -> bool {

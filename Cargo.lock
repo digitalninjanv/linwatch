@@ -96,18 +96,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fedora-monitor"
-version = "0.1.1"
-dependencies = [
- "crossterm",
- "libc",
- "ratatui",
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -175,6 +163,18 @@ name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+
+[[package]]
+name = "linwatch"
+version = "0.1.1"
+dependencies = [
+ "crossterm",
+ "libc",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "toml",
+]
 
 [[package]]
 name = "lock_api"
