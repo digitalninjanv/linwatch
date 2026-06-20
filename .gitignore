@@ -1,3 +1,5 @@
 /target/
 *.profraw
 *.profdata
+.firecrawl/
+.codegraph/daemon.pid

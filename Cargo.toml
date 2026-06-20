@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Lightweight Fedora/Linux terminal system monitor with accountability-focused metrics."
 readme = "README.md"
-keywords = ["fedora", "linux", "monitor", "tui", "ratatui"]
+keywords = ["fedora", "linux", "monitor", "tui", "ratatui", "system-monitor"]
 categories = ["command-line-utilities"]
+license = "MIT"
+repository = "https://github.com/digitalninjanv/fedora-system-monitor"
+homepage = "https://github.com/digitalninjanv/fedora-system-monitor"
 
 [dependencies]
 ratatui = "0.26"
