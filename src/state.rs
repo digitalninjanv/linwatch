@@ -516,12 +516,12 @@ impl AppState {
                 let elapsed = now.duration_since(*prev_time).as_secs_f64().max(0.1);
                 self.interfaces = current
                     .iter()
-                    .map(|(name, (rx, tx))| {
-                        let (prev_rx, prev_tx) = previous.get(name).unwrap_or(&(0, 0));
+                    .map(|(name, &(rx, tx))| {
+                        let (prev_rx, prev_tx) = previous.get(name).copied().unwrap_or((rx, tx));
                         NetInterface {
                             name: name.clone(),
-                            down_bps: ((rx.saturating_sub(*prev_rx)) as f64 * 8.0) / elapsed,
-                            up_bps: ((tx.saturating_sub(*prev_tx)) as f64 * 8.0) / elapsed,
+                            down_bps: ((rx.saturating_sub(prev_rx)) as f64 * 8.0) / elapsed,
+                            up_bps: ((tx.saturating_sub(prev_tx)) as f64 * 8.0) / elapsed,
                         }
                     })
                     .collect();
@@ -541,12 +541,12 @@ impl AppState {
                 let elapsed = now.duration_since(*prev_time).as_secs_f64().max(0.1);
                 self.disk_io = current
                     .iter()
-                    .map(|(name, (rd, wr))| {
-                        let (prev_rd, prev_wr) = previous.get(name).unwrap_or(&(0, 0));
+                    .map(|(name, &(rd, wr))| {
+                        let (prev_rd, prev_wr) = previous.get(name).copied().unwrap_or((rd, wr));
                         DiskIoInfo {
                             device: name.clone(),
-                            read_bps: ((rd.saturating_sub(*prev_rd)) as f64 * 512.0) / elapsed,
-                            write_bps: ((wr.saturating_sub(*prev_wr)) as f64 * 512.0) / elapsed,
+                            read_bps: ((rd.saturating_sub(prev_rd)) as f64 * 512.0) / elapsed,
+                            write_bps: ((wr.saturating_sub(prev_wr)) as f64 * 512.0) / elapsed,
                         }
                     })
                     .collect();
