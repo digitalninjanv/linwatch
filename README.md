@@ -128,6 +128,19 @@ cargo build --release
 ./target/release/fedora-monitor
 ```
 
+### Uninstall
+
+To completely remove `fedora-monitor` from your system, delete the binary and configuration files:
+
+```bash
+# Remove the binary (check whichever path you installed it to)
+rm -f ~/.local/bin/fedora-monitor
+sudo rm -f /usr/local/bin/fedora-monitor
+
+# (Optional) Remove the configuration directory
+rm -rf ~/.config/fedora-monitor
+```
+
 ### Instalasi (Indonesia)
 
 **Pilihan 1: Satu baris (recommended)**
@@ -147,6 +160,19 @@ git clone https://github.com/digitalninjanv/fedora-system-monitor.git
 cd fedora-system-monitor
 cargo build --release
 ./target/release/fedora-monitor
+```
+
+**Pilihan 4: Uninstall**
+
+Untuk menghapus `fedora-monitor` sepenuhnya dari sistem Anda, jalankan perintah berikut:
+
+```bash
+# Hapus binary (sesuaikan dengan lokasi instalasi Anda)
+rm -f ~/.local/bin/fedora-monitor
+sudo rm -f /usr/local/bin/fedora-monitor
+
+# (Opsional) Hapus direktori konfigurasi
+rm -rf ~/.config/fedora-monitor
 ```
 
 ---
