@@ -106,11 +106,11 @@ Download from the [Releases page](https://github.com/digitalninjanv/linwatch/rel
 
 ```bash
 # x86_64
-curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.1-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.2-x86_64-unknown-linux-gnu.tar.gz | tar -xz
 sudo install linwatch /usr/local/bin/
 
 # aarch64
-curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.1-aarch64-unknown-linux-gnu.tar.gz | tar -xz
+curl -sSfL https://github.com/digitalninjanv/linwatch/releases/latest/download/linwatch-v0.1.2-aarch64-unknown-linux-gnu.tar.gz | tar -xz
 sudo install linwatch /usr/local/bin/
 ```
 
