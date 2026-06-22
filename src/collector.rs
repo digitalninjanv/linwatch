@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+#[must_use]
 pub fn read_trimmed(path: &str) -> Option<String> {
     fs::read_to_string(path)
         .ok()
@@ -24,16 +25,37 @@ pub fn read_selinux_mode() -> String {
     }
 }
 
+#[must_use]
 pub fn read_git_modified_count() -> Option<usize> {
-    let output = Command::new("git")
+    let mut child = Command::new("git")
         .args(["status", "--porcelain"])
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
         .ok()?;
-    if output.status.success() {
-        let content = String::from_utf8_lossy(&output.stdout);
-        Some(content.lines().filter(|l| !l.trim().is_empty()).count())
-    } else {
-        None
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                let mut output = child.stdout.take()?;
+                use std::io::Read;
+                let mut content = String::new();
+                output.read_to_string(&mut content).ok()?;
+                return Some(content.lines().filter(|l| !l.trim().is_empty()).count());
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => return None,
+        }
     }
 }
 
@@ -57,6 +79,7 @@ pub fn read_cpu_vulnerabilities() -> String {
     format!("Vuln: {vulnerable}, Mitigated: {mitigated}")
 }
 
+#[must_use]
 pub fn read_open_ports() -> Option<Vec<OpenPort>> {
     let mut ports = Vec::new();
     if let Ok(content) = fs::read_to_string("/proc/net/tcp") {
@@ -183,6 +206,7 @@ fn os_release_value(content: &str, key: &str) -> Option<String> {
     })
 }
 
+#[must_use]
 pub fn read_cpu_snapshot() -> Option<CpuSnapshot> {
     let content = fs::read_to_string("/proc/stat").ok()?;
     let mut total = None;
@@ -224,6 +248,7 @@ fn parse_cpu_sample(line: &str) -> Option<CpuSample> {
     Some(CpuSample { idle, total })
 }
 
+#[must_use]
 pub fn read_mem_info() -> Option<MemInfo> {
     let content = fs::read_to_string("/proc/meminfo").ok()?;
     parse_mem_info(&content)
@@ -260,6 +285,7 @@ fn parse_mem_info(content: &str) -> Option<MemInfo> {
     })
 }
 
+#[must_use]
 pub fn read_disk_info() -> Option<Vec<DiskInfo>> {
     let mut mounts = important_mounts();
     if !mounts.iter().any(|mount| mount == "/") {
@@ -303,10 +329,13 @@ fn important_mounts() -> Vec<String> {
 fn read_mount_info(mount_point: &str) -> Option<DiskInfo> {
     let path = CString::new(mount_point).ok()?;
     let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: statvfs is a POSIX read-only syscall that fills a caller-provided buffer.
+    // The MaybeUninit is only written to on success (result == 0).
     let result = unsafe { libc::statvfs(path.as_ptr(), stats.as_mut_ptr()) };
     if result != 0 {
         return None;
     }
+    // SAFETY: statvfs returned success, so the buffer was fully initialized above.
     let stats = unsafe { stats.assume_init() };
     let block_size = stats.f_frsize as f64;
     let total_bytes = stats.f_blocks as f64 * block_size;
@@ -374,6 +403,7 @@ pub fn read_battery() -> (Option<u16>, String) {
     (None, String::from("No battery"))
 }
 
+#[must_use]
 pub fn read_network_totals() -> Option<HashMap<String, (u64, u64)>> {
     let content = fs::read_to_string("/proc/net/dev").ok()?;
     Some(parse_network_totals(&content))
@@ -403,6 +433,7 @@ fn parse_network_totals(content: &str) -> HashMap<String, (u64, u64)> {
     interfaces
 }
 
+#[must_use]
 pub fn read_disk_io_totals() -> Option<HashMap<String, (u64, u64)>> {
     let content = fs::read_to_string("/proc/diskstats").ok()?;
     Some(parse_disk_io_totals(&content))
@@ -430,6 +461,7 @@ fn parse_disk_io_totals(content: &str) -> HashMap<String, (u64, u64)> {
     devices
 }
 
+#[must_use]
 pub fn read_temperature() -> Option<f64> {
     let base = Path::new("/sys/class/thermal");
     if let Ok(entries) = fs::read_dir(base) {
@@ -448,6 +480,7 @@ pub fn read_temperature() -> Option<f64> {
     None
 }
 
+#[must_use]
 pub fn read_gpu_info() -> Option<Vec<GpuInfo>> {
     let entries = fs::read_dir("/sys/class/drm").ok()?;
     let mut gpus = Vec::new();
@@ -530,6 +563,7 @@ pub fn read_gpu_info() -> Option<Vec<GpuInfo>> {
     Some(gpus)
 }
 
+#[must_use]
 pub fn read_systemd_failed_units(limit: usize) -> Option<Vec<SystemdUnitIssue>> {
     let output = Command::new("systemctl")
         .args(["list-units", "--state=failed", "--no-legend", "--plain"])
@@ -557,6 +591,7 @@ pub fn read_systemd_failed_units(limit: usize) -> Option<Vec<SystemdUnitIssue>> 
     Some(issues)
 }
 
+#[must_use]
 pub fn read_storage_health() -> Option<Vec<StorageHealth>> {
     let entries = fs::read_dir("/sys/block").ok()?;
     let mut drives = Vec::new();
@@ -832,6 +867,7 @@ fn read_gpu_power_w(device_path: &Path, driver: &str) -> Option<f64> {
     None
 }
 
+#[must_use]
 pub fn read_process_summary(
     limit: usize,
     prev_totals: &HashMap<u32, u64>,
@@ -969,6 +1005,8 @@ fn compare_mem_desc(a: &ProcessInfo, b: &ProcessInfo) -> Ordering {
 }
 
 fn page_size_bytes() -> f64 {
+    // SAFETY: sysconf(_SC_PAGESIZE) is a POSIX read-only query that returns
+    // the system page size. It never writes memory and is safe to call.
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     if page_size > 0 {
         page_size as f64

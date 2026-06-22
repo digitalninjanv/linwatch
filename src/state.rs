@@ -271,6 +271,9 @@ impl AppState {
     }
 
     pub fn sample_status(&self) -> &'static str {
+        if self.tick_count <= 1 {
+            return "Warming up";
+        }
         match self.degraded_sources.len() {
             0 => "OK",
             1 | 2 => "Partial",
@@ -457,18 +460,13 @@ impl AppState {
 
             for p in &mut summary.top_cpu {
                 p.is_high_risk = p.cpu_pct > 90.0;
-                self.process_history
-                    .entry(p.pid)
-                    .or_insert_with(|| VecDeque::with_capacity(SPARKLINE_LIMIT))
-                    .push_back(p.cpu_pct);
-                if self
+                let hist = self
                     .process_history
-                    .get(&p.pid)
-                    .is_some_and(|h| h.len() > SPARKLINE_LIMIT)
-                {
-                    if let Some(h) = self.process_history.get_mut(&p.pid) {
-                        h.pop_front();
-                    }
+                    .entry(p.pid)
+                    .or_insert_with(|| VecDeque::with_capacity(SPARKLINE_LIMIT));
+                hist.push_back(p.cpu_pct);
+                while hist.len() > SPARKLINE_LIMIT {
+                    hist.pop_front();
                 }
             }
             for p in &mut summary.top_mem {
@@ -479,8 +477,15 @@ impl AppState {
             self.previous_process_totals = summary.current_totals;
         }
 
-        if self.process_history.len() > 50 {
-            let active: HashSet<u32> = self.top_cpu_processes.iter().map(|p| p.pid).collect();
+        // Proactively evict sparkline history for PIDs no longer in any top list.
+        // Prevents unbounded HashMap growth on systems with many short-lived processes.
+        {
+            let active: HashSet<u32> = self
+                .top_cpu_processes
+                .iter()
+                .chain(self.top_mem_processes.iter())
+                .map(|p| p.pid)
+                .collect();
             self.process_history.retain(|pid, _| active.contains(pid));
         }
 
@@ -614,11 +619,24 @@ impl AppState {
     }
 
     pub fn request_kill(&mut self) {
+        let own_pid = std::process::id();
         let procs = self.filtered_processes();
         if let Some(p) = procs
             .get(self.process_selected)
             .map(|p| (p.pid, p.name.clone()))
         {
+            // Refuse to kill PID 1 (init/systemd) or our own process.
+            if p.0 <= 1 {
+                self.process_action_message =
+                    Some(String::from("Refusing to kill PID 1 (init/systemd)"));
+                return;
+            }
+            if p.0 == own_pid {
+                self.process_action_message =
+                    Some(String::from("Refusing to kill own process (linwatch)"));
+                return;
+            }
+
             match self.confirm_kill_pid {
                 Some(pid) if pid == p.0 => {
                     match self.execute_kill(p.0) {
@@ -651,6 +669,9 @@ impl AppState {
     }
 
     fn execute_kill(&mut self, pid: u32) -> std::io::Result<()> {
+        // SAFETY: libc::kill is a POSIX syscall that sends a signal to a process.
+        // The pid is validated before calling (must be > 1 and not our own PID).
+        // A return value of 0 means success; non-zero means error, caught by last_os_error.
         let result = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
         if result == 0 {
             Ok(())
@@ -1580,6 +1601,8 @@ mod tests {
     #[test]
     fn sample_status_tracking() {
         let mut app = bare_state();
+        // First tick is "Warming up" — advance past it.
+        app.tick_count = 2;
         app.degraded_sources.clear();
         assert_eq!(app.sample_status(), "OK");
         app.degraded_sources.push("cpu".into());
@@ -1649,7 +1672,8 @@ mod tests {
 
     #[test]
     fn snapshot_contains_expected_fields() {
-        let app = bare_state();
+        let mut app = bare_state();
+        app.tick_count = 2;
         let snap = app.to_snapshot();
         assert_eq!(snap.health_status, "Healthy");
         assert_eq!(snap.sample_status, "OK");

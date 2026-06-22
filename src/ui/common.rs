@@ -48,6 +48,7 @@ pub fn sample_status_color(status: &str) -> Color {
     match status {
         "OK" => t.accent_green,
         "Partial" => t.accent_orange,
+        "Warming up" => t.accent_blue,
         _ => t.accent_red,
     }
 }

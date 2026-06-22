@@ -16,13 +16,13 @@ use std::{
 use types::{AppConfig, MonitorConfig};
 
 fn main() -> Result<(), io::Error> {
-    let config = load_config();
-    let Some(config) = parse_args(config)? else {
+    let (config, config_warnings) = load_config();
+    let Some(app_config) = parse_args(config, &config_warnings)? else {
         return Ok(());
     };
 
-    if config.json_once {
-        return json_output(&config);
+    if app_config.json_once {
+        return json_output(&app_config);
     }
 
     enable_raw_mode()?;
@@ -31,7 +31,7 @@ fn main() -> Result<(), io::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let result = catch_unwind(AssertUnwindSafe(|| ui::run_app(&mut terminal, config)));
+    let result = catch_unwind(AssertUnwindSafe(|| ui::run_app(&mut terminal, app_config)));
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -88,29 +88,33 @@ fn write_snapshot<W: io::Write>(
     .map_err(io::Error::other)
 }
 
-fn load_config() -> MonitorConfig {
+fn load_config() -> (MonitorConfig, Vec<String>) {
     let config_dir = dirs_config_path();
     let config_path = config_dir.join("linwatch").join("config.toml");
 
     if !config_path.exists() {
-        return MonitorConfig::default();
+        return (MonitorConfig::default(), Vec::new());
     }
 
     match fs::read_to_string(&config_path) {
-        Ok(content) => toml::from_str(&content)
-            .map(validate_config)
-            .unwrap_or_else(|e| {
-                eprintln!("Warning: config parse error: {e}");
-                MonitorConfig::default()
-            }),
-        Err(_) => MonitorConfig::default(),
+        Ok(content) => match toml::from_str(&content) {
+            Ok(config) => validate_config(config),
+            Err(e) => {
+                let mut warnings = Vec::new();
+                warnings.push(format!("Config parse error: {e}"));
+                (MonitorConfig::default(), warnings)
+            }
+        },
+        Err(_) => (MonitorConfig::default(), Vec::new()),
     }
 }
 
-fn validate_config(mut config: MonitorConfig) -> MonitorConfig {
+fn validate_config(mut config: MonitorConfig) -> (MonitorConfig, Vec<String>) {
+    let mut warnings = Vec::new();
+
     if let Some(theme) = config.theme.as_deref() {
         if parse_theme_name(theme).is_err() {
-            eprintln!("Warning: unsupported theme in config: {theme}; using default");
+            warnings.push(format!("unsupported theme '{theme}'; using default"));
             config.theme = None;
         }
     }
@@ -131,35 +135,65 @@ fn validate_config(mut config: MonitorConfig) -> MonitorConfig {
                 | "processes"
                 | "proc"
         ) {
-            eprintln!("Warning: unsupported default_tab in config: {tab}; using overview");
+            warnings.push(format!("unsupported default_tab '{tab}'; using overview"));
             config.default_tab = None;
         }
     }
 
-    clamp_f64(&mut config.cpu_alert, 1.0, 100.0, "cpu_alert");
-    clamp_f64(&mut config.mem_alert, 1.0, 100.0, "mem_alert");
-    clamp_f64(&mut config.temp_alert, 1.0, 120.0, "temp_alert");
-    clamp_f64(&mut config.swap_alert, 0.0, 100.0, "swap_alert");
-    clamp_u16(&mut config.disk_alert, 1, 100, "disk_alert");
-    clamp_u16(&mut config.battery_alert, 1, 100, "battery_alert");
-    config
+    clamp_f64(
+        &mut config.cpu_alert,
+        1.0,
+        100.0,
+        "cpu_alert",
+        &mut warnings,
+    );
+    clamp_f64(
+        &mut config.mem_alert,
+        1.0,
+        100.0,
+        "mem_alert",
+        &mut warnings,
+    );
+    clamp_f64(
+        &mut config.temp_alert,
+        1.0,
+        120.0,
+        "temp_alert",
+        &mut warnings,
+    );
+    clamp_f64(
+        &mut config.swap_alert,
+        0.0,
+        100.0,
+        "swap_alert",
+        &mut warnings,
+    );
+    clamp_u16(&mut config.disk_alert, 1, 100, "disk_alert", &mut warnings);
+    clamp_u16(
+        &mut config.battery_alert,
+        1,
+        100,
+        "battery_alert",
+        &mut warnings,
+    );
+    (config, warnings)
 }
 
-fn clamp_f64(value: &mut Option<f64>, min: f64, max: f64, name: &str) {
+fn clamp_f64(value: &mut Option<f64>, min: f64, max: f64, name: &str, warnings: &mut Vec<String>) {
     if let Some(current) = *value {
         let clamped = current.clamp(min, max);
         if (clamped - current).abs() > f64::EPSILON {
-            eprintln!("Warning: {name} out of range; clamped to {clamped}");
+            warnings.push(format!("{name} out of range; clamped to {clamped}"));
             *value = Some(clamped);
         }
     }
 }
 
-fn clamp_u16(value: &mut Option<u16>, min: u16, max: u16, name: &str) {
+fn clamp_u16(value: &mut Option<u16>, min: u16, max: u16, name: &str, warnings: &mut Vec<String>) {
     if let Some(current) = *value {
         let clamped = current.clamp(min, max);
         if clamped != current {
-            eprintln!("Warning: {name} out of range; clamped to {clamped}");
+            warnings.push(format!("{name} out of range; clamped to {clamped}"));
             *value = Some(clamped);
         }
     }
@@ -173,7 +207,10 @@ fn dirs_config_path() -> std::path::PathBuf {
     }
 }
 
-fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
+fn parse_args(
+    config: MonitorConfig,
+    config_warnings: &[String],
+) -> Result<Option<AppConfig>, io::Error> {
     let mut app_config = AppConfig {
         refresh_index: resolve_interval_index(config.refresh_interval.as_deref()),
         config,
@@ -196,7 +233,21 @@ fn parse_args(config: MonitorConfig) -> Result<Option<AppConfig>, io::Error> {
                 return Ok(None);
             }
             "--check-config" => {
-                println!("Config OK");
+                let config_dir = dirs_config_path();
+                let config_path = config_dir.join("linwatch").join("config.toml");
+                if config_path.exists() {
+                    println!("Config file: {}", config_path.display());
+                } else {
+                    println!("No config file found; using defaults");
+                }
+                if config_warnings.is_empty() {
+                    println!("Config OK — no issues found");
+                } else {
+                    println!("Config warnings ({}):", config_warnings.len());
+                    for warning in config_warnings {
+                        println!("  - {warning}");
+                    }
+                }
                 return Ok(None);
             }
             "-i" | "--interval" => {
