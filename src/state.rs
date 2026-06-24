@@ -281,10 +281,6 @@ impl AppState {
         }
     }
 
-    pub fn max_core_usage(&self) -> f64 {
-        self.core_usages.iter().copied().fold(0.0, f64::max)
-    }
-
     pub fn mem_pct(&self) -> f64 {
         (self.mem_used / self.mem_total * 100.0).clamp(0.0, 100.0)
     }

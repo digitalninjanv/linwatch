@@ -133,9 +133,11 @@ pub struct MonitorEvent {
 #[derive(Clone)]
 pub struct SystemdUnitIssue {
     pub unit: String,
+    #[allow(dead_code)]
     pub load: String,
     pub active: String,
     pub sub: String,
+    #[allow(dead_code)]
     pub description: String,
 }
 
